@@ -2,11 +2,12 @@ const std = @import("std");
 const sokol = @import("sokol");
 const sapp = sokol.app;
 
-const rend = @import("lib/render.zig");
 const input = @import("lib/input.zig");
+const rend = @import("lib/render.zig");
 const alg = @import("lib/algebra.zig");
 const Vec3 = alg.Vec3;
 const Mat4 = alg.Mat4;
+
 const shade = @import("shaders/cube.glsl.zig");
 
 const Physics = struct {
