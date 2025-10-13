@@ -111,7 +111,7 @@ fn buildWeb(b: *Build, opts: Options) !void {
     const zip_step = b.addSystemCommand(&.{
         "zip",
         "-r",
-        b.pathJoin(&.{ b.install_path, "camera_demo_web.zip" }),
+        b.pathJoin(&.{ b.install_path, "web.zip" }),
         "web",
     });
     zip_step.setCwd(.{ .cwd_relative = b.install_path });

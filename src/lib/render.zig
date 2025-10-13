@@ -2,7 +2,7 @@ const std = @import("std");
 const sokol = @import("sokol");
 const sg = sokol.gfx;
 const sglue = sokol.glue;
-const alg = @import("lib/algebra.zig");
+const alg = @import("algebra.zig");
 const Vec3 = alg.Vec3;
 const Mat4 = alg.Mat4;
 
