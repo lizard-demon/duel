@@ -1,3 +1,4 @@
+// bsp.zig
 const std = @import("std");
 const alg = @import("algebra.zig");
 const Vec3 = alg.Vec3;
