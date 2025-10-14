@@ -1,3 +1,4 @@
+// Main.zig
 const std = @import("std");
 const sokol = @import("sokol");
 const sapp = sokol.app;
@@ -5,42 +6,54 @@ const sapp = sokol.app;
 const input = @import("lib/input.zig");
 const rend = @import("lib/render.zig");
 const alg = @import("lib/algebra.zig");
+const bsp = @import("lib/bsp.zig");
 const Vec3 = alg.Vec3;
 const Mat4 = alg.Mat4;
 
 const shade = @import("shaders/cube.glsl.zig");
 
 const Physics = struct {
-    vel: Vec3 = Vec3.zero(), gravity: f32 = 9.8, ground: f32 = 1.0, grounded: bool = true,
+    vel: Vec3 = Vec3.zero(),
+    gravity: f32 = 9.8,
+    grounded: bool = false,
 
     pub fn jump(self: *Physics, force: f32) void {
-        self.vel.data[1] = force; self.grounded = false;
+        self.vel.data[1] = force;
+        self.grounded = false;
     }
 
     pub fn accel(self: *Physics, wishdir: Vec3, speed: f32, dt: f32) void {
         self.vel = self.vel.add(wishdir.norm().scale(speed * dt));
     }
 
-    fn grav(self: *Physics, dt: f32) void { self.vel.data[1] -= self.gravity * dt; }
+    fn grav(self: *Physics, dt: f32) void {
+        self.vel.data[1] -= self.gravity * dt;
+    }
 
     fn friction(self: *Physics, amount: f32, dt: f32) void {
         if (self.grounded) {
             const xz = Vec3.new(self.vel.x(), 0, self.vel.z());
             const damped = xz.scale(1.0 - amount * dt);
-            self.vel.data[0] = damped.x(); self.vel.data[2] = damped.z();
+            self.vel.data[0] = damped.x();
+            self.vel.data[2] = damped.z();
         }
     }
 
-    fn collide(self: *Physics, pos: *Vec3) void {
-        if (pos.data[1] <= self.ground) {
-            pos.data[1] = self.ground; self.vel.data[1] = 0; self.grounded = true;
-        } else self.grounded = false;
-    }
+    pub fn update(self: *Physics, pos: *Vec3, world: *bsp.BSP, dt: f32) void {
+        self.grav(dt);
+        self.friction(8.0, dt);
 
-    pub fn update(self: *Physics, pos: *Vec3, dt: f32) void {
-        self.grav(dt); self.friction(8.0, dt);
-        pos.* = pos.add(self.vel.scale(dt));
-        self.collide(pos);
+        const box = bsp.AABB.new(Vec3.new(-0.4, -0.9, -0.4), Vec3.new(0.4, 0.9, 0.4));
+        const result = world.trace(pos.*, box, self.vel.scale(dt));
+
+        if (result.hit) {
+            pos.* = result.pos;
+            self.vel = result.vel.scale(1.0 / dt);
+            self.grounded = @abs(result.vel.y()) < 0.01;
+        } else {
+            pos.* = pos.add(self.vel.scale(dt));
+            self.grounded = false;
+        }
     }
 };
 
@@ -49,18 +62,28 @@ const App = struct {
     cam: rend.Camera3D,
     io: input.IO = .{},
     phys: Physics = .{},
+    world: bsp.BSP,
 
     fn init() !App {
         const v = [_]rend.Vertex{
-            .{ .pos = .{ -5, 0, -5 }, .col = .{ 0.3, 0.3, 1, 1 } },
-            .{ .pos = .{  5, 0, -5 }, .col = .{ 0.3, 1, 0.35, 1 } },
-            .{ .pos = .{  5, 0,  5 }, .col = .{ 1, 0.3, 0.35, 1 } },
-            .{ .pos = .{ -5, 0,  5 }, .col = .{ 0.3, 0.3, 0.35, 1 } },
+            .{ .pos = .{ -20, -1, -20 }, .col = .{ 0.2, 0.2, 0.25, 1 } },
+            .{ .pos = .{  20, -1, -20 }, .col = .{ 0.25, 0.3, 0.35, 1 } },
+            .{ .pos = .{  20, -1,  20 }, .col = .{ 0.3, 0.25, 0.3, 1 } },
+            .{ .pos = .{ -20, -1,  20 }, .col = .{ 0.25, 0.25, 0.3, 1 } },
         };
         const i = [_]u16{ 0, 1, 2, 0, 2, 3 };
+
+        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+        const allocator = gpa.allocator();
+
         var self = App{
             .pipeline = rend.Renderer.init(&v, &i, .{ 0.1, 0.1, 0.15, 1 }),
-            .cam = rend.Camera3D.init(Vec3.new(0, 2, 5), 0, 0, 60),
+            .cam = rend.Camera3D.init(Vec3.new(0, 2, 0), 0, 0, 60),
+            .world = try bsp.BSP.init(
+                allocator,
+                bsp.AABB.new(Vec3.new(-50, -10, -50), Vec3.new(50, 0, 50)),
+                3
+            ),
         };
         self.pipeline.shader(shade.cubeShaderDesc(sokol.gfx.queryBackend()));
         return self;
@@ -81,8 +104,8 @@ const App = struct {
         }
 
         if (dir.length() > 0) self.phys.accel(dir, 5, dt);
-        if (self.io.justPressed(.space) and self.phys.grounded) self.phys.jump(5);
-        self.phys.update(&self.cam.position, dt);
+        if (self.io.pressed(.space) and self.phys.grounded) self.phys.jump(5);
+        self.phys.update(&self.cam.position, &self.world, dt);
 
         if (self.io.mouse.isLocked())
             self.cam.look(self.io.mouse.dx * 0.002, -self.io.mouse.dy * 0.002);
@@ -103,6 +126,7 @@ const App = struct {
 
     fn deinit(self: *App) void {
         self.pipeline.deinit();
+        self.world.deinit();
     }
 };
 
@@ -121,7 +145,7 @@ pub fn main() void {
         .width = 800, .height = 600,
         .sample_count = 4,
         .icon = .{ .sokol_default = true },
-        .window_title = "Minimal Physics",
+        .window_title = "BSP Physics",
         .logger = .{ .func = sokol.log.func },
     });
 }
