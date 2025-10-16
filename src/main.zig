@@ -5,13 +5,14 @@ const sapp = sokol.app;
 const input = @import("lib/input.zig");
 const rend = @import("lib/render.zig");
 const alg = @import("lib/algebra.zig");
-const voxel = @import("lib/voxel.zig");
+const octree = @import("lib/octree.zig");
+const mesh = @import("lib/mesh.zig");
 const Vec3 = alg.Vec3;
 const Mat4 = alg.Mat4;
 const shade = @import("shaders/cube.glsl.zig");
-const World = voxel.OctreeWorld(6); // depth 6 = 64x64x64
+const World = octree.Octree(6); // depth 6 = 64x64x64
 
-fn blockColors(block: voxel.Block) [3]f32 {
+fn blockColors(block: octree.Block) [3]f32 {
     return switch (block) {
         .grass => .{ 0.3, 0.7, 0.3 },
         .dirt => .{ 0.5, 0.35, 0.2 },
@@ -92,8 +93,8 @@ const App = struct {
 
         var verts: [65536]rend.Vertex = undefined;
         var indices: [98304]u16 = undefined;
-        const mesh = self.world.buildMesh(&verts, &indices, blockColors);
-        self.voxel_pipeline = rend.Renderer.init(verts[0..mesh.vcount], indices[0..mesh.icount], .{ 0.5, 0.7, 0.9, 1 });
+        const result = mesh.buildMesh(&self.world, &verts, &indices, blockColors);
+        self.voxel_pipeline = rend.Renderer.init(verts[0..result.vcount], indices[0..result.icount], .{ 0.5, 0.7, 0.9, 1 });
 
         const shader_desc = shade.cubeShaderDesc(sokol.gfx.queryBackend());
         self.pipeline.shader(shader_desc);
