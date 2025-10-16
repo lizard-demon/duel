@@ -1,16 +1,20 @@
-// main.zig
 const std = @import("std");
 const sokol = @import("sokol");
 const sapp = sokol.app;
-const input = @import("lib/input.zig");
-const rend = @import("lib/render.zig");
-const alg = @import("lib/algebra.zig");
-const octree = @import("lib/octree.zig");
-const mesh = @import("lib/mesh.zig");
+
+// Input
+const input = @import("lib/io/input.zig");
+// World
+const octree = @import("lib/world/octree.zig");
+const mesh = @import("lib/world/mesh.zig");
+const rend = @import("lib/world/render.zig");
+// Math
+const alg = @import("lib/math/algebra.zig");
+
 const Vec3 = alg.Vec3;
 const Mat4 = alg.Mat4;
-const shade = @import("shaders/cube.glsl.zig");
 const World = octree.Octree(6); // depth 6 = 64x64x64
+const shade = @import("shaders/cube.glsl.zig");
 
 fn blockColors(block: octree.Block) [3]f32 {
     return switch (block) {
@@ -25,11 +29,11 @@ fn Physics(comptime cfg: struct {
     gravity: f32 = 20.0,
     jump: f32 = 8.0,
     accel_ground: f32 = 10.0,
-    accel_air: f32 = 1.0,
-    friction: f32 = 6.0,
+    accel_air: f32 = 10.0,
+    friction: f32 = 4.0,
     speed_max: f32 = 7.0,
-    speed_air_cap: f32 = 1.0,
-    speed_stop: f32 = 1.0,
+    speed_stop: f32 = 0.1,
+    air_cap: f32 = 0.7, // Air acceleration cap threshold
 }) type {
     return struct {
         vel: Vec3 = Vec3.zero(),
@@ -41,18 +45,61 @@ fn Physics(comptime cfg: struct {
         }
 
         pub fn move(self: *@This(), dir: Vec3, dt: f32) void {
+            // Get horizontal direction length
             const len = @sqrt(dir.x() * dir.x() + dir.z() * dir.z());
             if (len < 0.0001) return if (self.grounded) self.applyFriction(dt);
-            const norm = Vec3.new(dir.x() / len, 0, dir.z() / len);
-            const wish = @min(cfg.speed_max * len, if (self.grounded) cfg.speed_max else cfg.speed_air_cap);
-            if (self.grounded) self.applyFriction(dt);
-            const add = wish - self.vel.dot(norm);
-            if (add > 0) self.vel = self.vel.add(norm.scale(@min((if (self.grounded) cfg.accel_ground else cfg.accel_air) * dt * wish, add)));
+
+            // Normalize wish direction
+            const wish_dir = Vec3.new(dir.x() / len, 0, dir.z() / len);
+            const wish_speed = cfg.speed_max * len;
+
+            if (self.grounded) {
+                self.applyFriction(dt);
+                self.accelerate(wish_dir, wish_speed, cfg.accel_ground * dt);
+            } else {
+                // Air acceleration - key to strafing
+                self.airAccelerate(wish_dir, wish_speed, cfg.accel_air * dt);
+            }
+        }
+
+        fn accelerate(self: *@This(), wish_dir: Vec3, wish_speed: f32, accel: f32) void {
+            // Current speed in wish direction
+            const current_speed = self.vel.dot(wish_dir);
+            // Speed to add
+            const add_speed = wish_speed - current_speed;
+            if (add_speed <= 0) return;
+
+            // Clamp acceleration
+            var accel_speed = accel * wish_speed;
+            if (accel_speed > add_speed) accel_speed = add_speed;
+
+            self.vel = self.vel.add(wish_dir.scale(accel_speed));
+        }
+
+        fn airAccelerate(self: *@This(), wish_dir: Vec3, wish_speed: f32, accel: f32) void {
+            // Cap wish speed for air control
+            const capped_speed = @min(wish_speed, cfg.air_cap);
+
+            // Current speed in wish direction
+            const current_speed = self.vel.dot(wish_dir);
+            // Speed to add
+            const add_speed = capped_speed - current_speed;
+            if (add_speed <= 0) return;
+
+            // How much to accelerate
+            var accel_speed = accel * wish_speed;
+            if (accel_speed > add_speed) accel_speed = add_speed;
+
+            // Add the acceleration
+            self.vel = self.vel.add(wish_dir.scale(accel_speed));
         }
 
         pub fn update(self: *@This(), pos: *Vec3, world: anytype, dt: f32) void {
             self.vel.data[1] -= cfg.gravity * dt;
-            const result = world.sweep(pos.*, .{ .min = Vec3.new(-0.4, -0.9, -0.4), .max = Vec3.new(0.4, 0.9, 0.4) }, self.vel.scale(dt), 3);
+            const result = world.sweep(pos.*, .{
+                .min = Vec3.new(-0.4, -0.9, -0.4),
+                .max = Vec3.new(0.4, 0.9, 0.4)
+            }, self.vel.scale(dt), 3);
             pos.* = result.pos;
             self.vel = result.vel.scale(1.0 / dt);
             self.grounded = result.hit and @abs(result.vel.y()) < 0.01;
@@ -65,7 +112,12 @@ fn Physics(comptime cfg: struct {
                 self.vel.data[2] = 0;
                 return;
             }
-            const scale = @max(0, speed - @max(speed, cfg.speed_stop) * cfg.friction * dt) / speed;
+
+            // Drop friction amount
+            const drop = @max(speed, cfg.speed_stop) * cfg.friction * dt;
+            const new_speed = @max(0, speed - drop);
+            const scale = new_speed / speed;
+
             self.vel.data[0] *= scale;
             self.vel.data[2] *= scale;
         }

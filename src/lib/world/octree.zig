@@ -1,5 +1,5 @@
 const std = @import("std");
-const alg = @import("algebra.zig");
+const alg = @import("../math/algebra.zig");
 const Vec3 = alg.Vec3;
 
 pub const Block = enum(u8) { air, grass, dirt, stone };
