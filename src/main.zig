@@ -7,11 +7,11 @@ const input = @import("lib/input.zig");
 const world = @import("world/map.zig");
 const mesh = @import("world/mesh.zig");
 const rend = @import("world/render.zig");
+const shade = @import("shaders/cube.glsl.zig");
 
 const V = alg.Vec3;
 const M = alg.Mat4;
 const W = world.World;
-const shade = @import("shaders/cube.glsl.zig");
 
 const Player = struct {
     pos: V,
@@ -22,7 +22,6 @@ const Player = struct {
     crouching: bool,
     io: input.IO,
 
-    // Ultra-minimalist constants
     const GRAVITY: f32 = 20;
     const JUMP_FORCE: f32 = 8;
     const ACCEL: f32 = 10;
@@ -53,7 +52,6 @@ const Player = struct {
         var d = V.zero();
         if (mv.x != 0) d = d.add(V.new(@cos(p.yaw), 0, @sin(p.yaw)).scale(mv.x));
         if (mv.y != 0) d = d.add(V.new(@sin(p.yaw), 0, -@cos(p.yaw)).scale(mv.y));
-
         p.move(d, dt);
 
         const want_crouch = p.io.shift();
@@ -124,22 +122,20 @@ const Player = struct {
     }
 };
 
-// Ultra-minimalist static color lookup
 const BLOCK_COLORS = [_][3]f32{
-    .{ 0, 0, 0 }, // air (unused)
-    .{ 0.3, 0.7, 0.3 }, // grass
-    .{ 0.5, 0.35, 0.2 }, // dirt
-    .{ 0.5, 0.5, 0.5 }, // stone
+    .{ 0, 0, 0 },
+    .{ 0.3, 0.7, 0.3 },
+    .{ 0.5, 0.35, 0.2 },
+    .{ 0.5, 0.5, 0.5 },
 };
 
 fn cols(b: world.Block) [3]f32 {
     return BLOCK_COLORS[@intFromEnum(b)];
 }
 
-// Static buffers for ultra-minimalist approach
 var static_verts: [65536]rend.Vertex = undefined;
 var static_indices: [98304]u16 = undefined;
-var static_buffer: [1024]u8 = undefined; // Fixed buffer for any potential allocations
+var static_buffer: [1024]u8 = undefined;
 
 const Game = struct {
     pipe: rend.Renderer,
@@ -157,7 +153,6 @@ const Game = struct {
         var s: Game = undefined;
         s.fba = std.heap.FixedBufferAllocator.init(&static_buffer);
 
-        // Ground plane - fully static
         const ground_verts = [_]rend.Vertex{
             .{ .pos = .{ -100, -1, -100 }, .col = .{ 0.1, 0.1, 0.12, 1 } },
             .{ .pos = .{ 100, -1, -100 }, .col = .{ 0.12, 0.15, 0.18, 1 } },
@@ -173,10 +168,7 @@ const Game = struct {
         const r = mesh.buildMesh(&s.w, &static_verts, &static_indices, cols);
         s.vox = rend.Renderer.init(static_verts[0..r.vcount], static_indices[0..r.icount], .{ 0.5, 0.7, 0.9, 1 });
 
-        // Query the actual backend (WebGL or WebGPU for WASM)
-        const backend = sokol.gfx.queryBackend();
-
-        const sh = shade.cubeShaderDesc(backend);
+        const sh = shade.cubeShaderDesc(sokol.gfx.queryBackend());
         s.pipe.shader(sh);
         s.vox.shader(sh);
         return s;
@@ -211,6 +203,7 @@ const Game = struct {
 };
 
 var app: Game = undefined;
+
 export fn init() void {
     app = Game.init();
 }
@@ -236,7 +229,7 @@ pub fn main() void {
         .height = 600,
         .sample_count = 4,
         .icon = .{ .sokol_default = true },
-        .window_title = "Flat Array Voxels",
+        .window_title = "Voxels",
         .logger = .{ .func = sokol.log.func },
     });
 }
