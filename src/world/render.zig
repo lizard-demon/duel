@@ -2,58 +2,9 @@ const std = @import("std");
 const sokol = @import("sokol");
 const sg = sokol.gfx;
 const sglue = sokol.glue;
-const alg = @import("../math/algebra.zig");
+const alg = @import("../lib/algebra.zig");
 const Vec3 = alg.Vec3;
 const Mat4 = alg.Mat4;
-
-pub const Camera3D = struct {
-    position: Vec3,
-    yaw: f32,
-    pitch: f32,
-    fov: f32,
-
-    pub fn init(position: Vec3, yaw: f32, pitch: f32, fov: f32) Camera3D {
-        return .{
-            .position = position,
-            .yaw = yaw,
-            .pitch = pitch,
-            .fov = fov,
-        };
-    }
-
-    pub fn forward(self: Camera3D) Vec3 {
-        const cy = @cos(self.yaw);
-        const sy = @sin(self.yaw);
-        const cp = @cos(self.pitch);
-        const sp = @sin(self.pitch);
-        return Vec3.new(cp * cy, sp, cp * sy);
-    }
-
-    pub fn right(self: Camera3D) Vec3 {
-        return self.forward().cross(Vec3.up()).norm();
-    }
-
-    pub fn move(self: *Camera3D, offset: Vec3) void {
-        self.position = self.position.add(offset);
-    }
-
-    pub fn look(self: *Camera3D, dyaw: f32, dpitch: f32) void {
-        self.yaw += dyaw;
-        self.pitch = std.math.clamp(
-            self.pitch + dpitch,
-            -std.math.pi / 2.0 + 0.01,
-            std.math.pi / 2.0 - 0.01,
-        );
-    }
-
-    pub fn viewMatrix(self: Camera3D) Mat4 {
-        return alg.lookAt(self.position, self.position.add(self.forward()), Vec3.up());
-    }
-
-    pub fn projectionMatrix(self: Camera3D, aspect: f32, near: f32, far: f32) Mat4 {
-        return alg.perspective(self.fov, aspect, near, far);
-    }
-};
 
 pub const Vertex = extern struct {
     pos: [3]f32,
@@ -76,7 +27,13 @@ pub const Renderer = struct {
             .bind = .{
                 .vertex_buffers = .{
                     sg.makeBuffer(.{ .data = sg.asRange(v) }),
-                    .{}, .{}, .{}, .{}, .{}, .{}, .{},
+                    .{},
+                    .{},
+                    .{},
+                    .{},
+                    .{},
+                    .{},
+                    .{},
                 },
                 .index_buffer = sg.makeBuffer(.{
                     .usage = .{ .index_buffer = true },
@@ -94,7 +51,13 @@ pub const Renderer = struct {
                             .a = clear_color[3],
                         },
                     },
-                    .{}, .{}, .{}, .{}, .{}, .{}, .{},
+                    .{},
+                    .{},
+                    .{},
+                    .{},
+                    .{},
+                    .{},
+                    .{},
                 },
             },
             .count = @intCast(i.len),

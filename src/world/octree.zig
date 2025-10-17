@@ -1,5 +1,5 @@
 const std = @import("std");
-const alg = @import("../math/algebra.zig");
+const alg = @import("../lib/algebra.zig");
 const Vec3 = alg.Vec3;
 
 pub const Block = enum(u8) { air, grass, dirt, stone };
@@ -16,30 +16,31 @@ pub const AABB = struct {
         const swept_min = self.min.add(vel);
         const swept_max = self.max.add(vel);
         return .{
-            .min = Vec3.new(@min(swept_min.x(), self.min.x()), @min(swept_min.y(), self.min.y()), @min(swept_min.z(), self.min.z())),
-            .max = Vec3.new(@max(swept_max.x(), self.max.x()), @max(swept_max.y(), self.max.y()), @max(swept_max.z(), self.max.z())),
+            .min = Vec3.new(@min(swept_min.data[0], self.min.data[0]), @min(swept_min.data[1], self.min.data[1]), @min(swept_min.data[2], self.min.data[2])),
+            .max = Vec3.new(@max(swept_max.data[0], self.max.data[0]), @max(swept_max.data[1], self.max.data[1]), @max(swept_max.data[2], self.max.data[2])),
         };
     }
 
     pub fn sweep(self: AABB, vel: Vec3, other: AABB) ?struct { t: f32, n: Vec3 } {
-        if (vel.length() < 0.0001) return null;
+        const len = @sqrt(vel.dot(vel));
+        if (len < 0.0001) return null;
         const inv = Vec3.new(
-            if (vel.x() != 0) 1.0 / vel.x() else std.math.inf(f32),
-            if (vel.y() != 0) 1.0 / vel.y() else std.math.inf(f32),
-            if (vel.z() != 0) 1.0 / vel.z() else std.math.inf(f32),
+            if (vel.data[0] != 0) 1.0 / vel.data[0] else std.math.inf(f32),
+            if (vel.data[1] != 0) 1.0 / vel.data[1] else std.math.inf(f32),
+            if (vel.data[2] != 0) 1.0 / vel.data[2] else std.math.inf(f32),
         );
-        const tx = axis(self.min.x(), self.max.x(), other.min.x(), other.max.x(), inv.x());
-        const ty = axis(self.min.y(), self.max.y(), other.min.y(), other.max.y(), inv.y());
-        const tz = axis(self.min.z(), self.max.z(), other.min.z(), other.max.z(), inv.z());
+        const tx = axis(self.min.data[0], self.max.data[0], other.min.data[0], other.max.data[0], inv.data[0]);
+        const ty = axis(self.min.data[1], self.max.data[1], other.min.data[1], other.max.data[1], inv.data[1]);
+        const tz = axis(self.min.data[2], self.max.data[2], other.min.data[2], other.max.data[2], inv.data[2]);
         const enter = @max(@max(tx.enter, ty.enter), tz.enter);
         const exit = @min(@min(tx.exit, ty.exit), tz.exit);
         if (enter > exit or enter > 1.0 or exit < 0.0 or enter < 0.0) return null;
         const n = if (tx.enter > ty.enter and tx.enter > tz.enter)
-            Vec3.new(if (vel.x() > 0) -1 else 1, 0, 0)
+            Vec3.new(if (vel.data[0] > 0) -1 else 1, 0, 0)
         else if (ty.enter > tz.enter)
-            Vec3.new(0, if (vel.y() > 0) -1 else 1, 0)
+            Vec3.new(0, if (vel.data[1] > 0) -1 else 1, 0)
         else
-            Vec3.new(0, 0, if (vel.z() > 0) -1 else 1);
+            Vec3.new(0, 0, if (vel.data[2] > 0) -1 else 1);
         return .{ .t = enter, .n = n };
     }
 
@@ -151,12 +152,12 @@ pub fn Octree(comptime depth: comptime_int) type {
                 var closest: f32 = 1.0;
                 var n = Vec3.zero();
                 var found = false;
-                var bx = @as(i32, @intFromFloat(@floor(region.min.x())));
-                while (bx <= @as(i32, @intFromFloat(@floor(region.max.x())))) : (bx += 1) {
-                    var by = @as(i32, @intFromFloat(@floor(region.min.y())));
-                    while (by <= @as(i32, @intFromFloat(@floor(region.max.y())))) : (by += 1) {
-                        var bz = @as(i32, @intFromFloat(@floor(region.min.z())));
-                        while (bz <= @as(i32, @intFromFloat(@floor(region.max.z())))) : (bz += 1) {
+                var bx = @as(i32, @intFromFloat(@floor(region.min.data[0])));
+                while (bx <= @as(i32, @intFromFloat(@floor(region.max.data[0])))) : (bx += 1) {
+                    var by = @as(i32, @intFromFloat(@floor(region.min.data[1])));
+                    while (by <= @as(i32, @intFromFloat(@floor(region.max.data[1])))) : (by += 1) {
+                        var bz = @as(i32, @intFromFloat(@floor(region.min.data[2])));
+                        while (bz <= @as(i32, @intFromFloat(@floor(region.max.data[2])))) : (bz += 1) {
                             if (!self.solid(bx, by, bz)) continue;
                             const b = Vec3.new(@floatFromInt(bx), @floatFromInt(by), @floatFromInt(bz));
                             if (player.sweep(v, .{ .min = b, .max = b.add(Vec3.new(1, 1, 1)) })) |col| {
@@ -175,8 +176,11 @@ pub fn Octree(comptime depth: comptime_int) type {
                 }
                 hit = true;
                 p = p.add(v.scale(@max(0, closest - 0.001)));
-                v = v.sub(n.scale(n.dot(v)));
-                if (v.length() < 0.0001) break;
+                const dot = n.dot(v);
+                v.data[0] -= n.data[0] * dot;
+                v.data[1] -= n.data[1] * dot;
+                v.data[2] -= n.data[2] * dot;
+                if (@sqrt(v.dot(v)) < 0.0001) break;
             }
             return .{ .pos = p, .vel = v, .hit = hit };
         }
