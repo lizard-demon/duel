@@ -3,13 +3,13 @@ const sapp = sokol.app;
 
 const alg = @import("lib/algebra.zig");
 const input = @import("lib/input.zig");
-const octree = @import("world/octree.zig");
+const world = @import("world/map.zig");
 const mesh = @import("world/mesh.zig");
 const rend = @import("world/render.zig");
 
 const V = alg.Vec3;
 const M = alg.Mat4;
-const W = octree.World;
+const W = world.World;
 const shade = @import("shaders/cube.glsl.zig");
 
 const Player = struct {
@@ -122,7 +122,7 @@ const Player = struct {
     }
 };
 
-fn cols(b: octree.Block) [3]f32 {
+fn cols(b: world.Block) [3]f32 {
     return switch (b) {
         .grass => .{ 0.3, 0.7, 0.3 },
         .dirt => .{ 0.5, 0.35, 0.2 },

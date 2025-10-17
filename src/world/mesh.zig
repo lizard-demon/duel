@@ -1,6 +1,6 @@
 const std = @import("std");
 const rend = @import("render.zig");
-const octree = @import("octree.zig");
+const octree = @import("map.zig");
 const Block = octree.Block;
 
 pub fn buildMesh(
