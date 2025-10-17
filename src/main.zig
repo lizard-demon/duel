@@ -138,6 +138,11 @@ const Game = struct {
     w: W,
 
     fn init() !Game {
+        sokol.gfx.setup(.{
+            .environment = sokol.glue.environment(),
+            .logger = .{ .func = sokol.log.func },
+        });
+
         var s: Game = undefined;
         s.pipe = rend.Renderer.init(&[_]rend.Vertex{
             .{ .pos = .{ -100, -1, -100 }, .col = .{ 0.1, 0.1, 0.12, 1 } },
@@ -168,14 +173,22 @@ const Game = struct {
         const proj = alg.perspective(60, sapp.widthf() / sapp.heightf(), 0.1, 1000);
         const view = s.player.getViewMatrix();
         const mvp = M.mul(proj, view);
+
+        sokol.gfx.beginPass(.{
+            .action = s.pipe.pass,
+            .swapchain = sokol.glue.swapchain(),
+        });
         s.pipe.draw(mvp);
         s.vox.draw(mvp);
+        sokol.gfx.endPass();
+        sokol.gfx.commit();
     }
 
     fn deinit(s: *Game) void {
         s.pipe.deinit();
         s.vox.deinit();
         s.w.deinit();
+        sokol.gfx.shutdown();
     }
 };
 

@@ -18,11 +18,6 @@ pub const Renderer = struct {
     count: u32,
 
     pub fn init(v: []const Vertex, i: []const u16, clear_color: [4]f32) Renderer {
-        sg.setup(.{
-            .environment = sglue.environment(),
-            .logger = .{ .func = sokol.log.func },
-        });
-
         return .{
             .bind = .{
                 .vertex_buffers = .{
@@ -82,16 +77,10 @@ pub const Renderer = struct {
     }
 
     pub fn draw(self: Renderer, mvp: Mat4) void {
-        sg.beginPass(.{
-            .action = self.pass,
-            .swapchain = sglue.swapchain(),
-        });
         sg.applyPipeline(self.pip);
         sg.applyBindings(self.bind);
         sg.applyUniforms(0, sg.asRange(&mvp));
         sg.draw(0, self.count, 1);
-        sg.endPass();
-        sg.commit();
     }
 
     pub fn deinit(self: Renderer) void {
@@ -104,6 +93,5 @@ pub const Renderer = struct {
         if (self.pip.id != 0) {
             sg.destroyPipeline(self.pip);
         }
-        sg.shutdown();
     }
 };
