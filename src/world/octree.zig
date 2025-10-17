@@ -51,154 +51,90 @@ pub const AABB = struct {
     }
 };
 
-pub fn Octree(comptime depth: comptime_int) type {
-    return struct {
-        root: Node,
-        size: i32,
+pub const World = struct {
+    blocks: [64][64][64]Block,
+    size: i32 = 64,
 
-        const Node = union(enum) {
-            leaf: Block,
-            branch: *[8]Node,
-        };
-
-        pub fn init() @This() {
-            const size = std.math.shl(i32, 1, depth);
-            var world: @This() = .{ .root = undefined, .size = size };
-            world.root = world.generate(0, 0, 0, size);
-            return world;
-        }
-
-        fn generate(self: *@This(), x: i32, y: i32, z: i32, s: i32) Node {
-            if (s == 1) {
-                const edge = x == 0 or x == self.size - 1 or z == 0 or z == self.size - 1;
-                return .{ .leaf = if (edge)
-                    if (y < self.size - 1) .stone else .grass
-                else if (y == 0) .grass else .air };
-            }
-            const h = @divExact(s, 2);
-            var uniform: ?Block = null;
-            var children = std.heap.page_allocator.create([8]Node) catch unreachable;
-            for (0..8) |i| {
-                const cx = x + if (i & 1 != 0) h else 0;
-                const cy = y + if (i & 2 != 0) h else 0;
-                const cz = z + if (i & 4 != 0) h else 0;
-                children[i] = self.generate(cx, cy, cz, h);
-                const b = switch (children[i]) {
-                    .leaf => |blk| blk,
-                    else => null,
-                };
-                if (i == 0) {
-                    uniform = b;
-                } else if (uniform != b) {
-                    uniform = null;
-                }
-            }
-            if (uniform) |blk| {
-                std.heap.page_allocator.destroy(children);
-                return .{ .leaf = blk };
-            }
-            return .{ .branch = children };
-        }
-
-        pub fn get(self: *const @This(), px: i32, py: i32, pz: i32) Block {
-            if (px < 0 or px >= self.size or py < 0 or py >= self.size or pz < 0 or pz >= self.size) return .air;
-            var node = &self.root;
-            var x: i32 = 0;
-            var y: i32 = 0;
-            var z: i32 = 0;
-            var s = self.size;
-            while (true) {
-                switch (node.*) {
-                    .leaf => |blk| return blk,
-                    .branch => |children| {
-                        s = @divExact(s, 2);
-                        const i: usize = (if (px >= x + s) @as(usize, 1) else 0) |
-                            (if (py >= y + s) @as(usize, 2) else 0) |
-                            (if (pz >= z + s) @as(usize, 4) else 0);
-                        if (px >= x + s) x += s;
-                        if (py >= y + s) y += s;
-                        if (pz >= z + s) z += s;
-                        node = &children[i];
-                    },
+    pub fn init() World {
+        var world = World{ .blocks = undefined };
+        for (0..64) |x| {
+            for (0..64) |y| {
+                for (0..64) |z| {
+                    const edge = x == 0 or x == 63 or z == 0 or z == 63;
+                    world.blocks[x][y][z] = if (edge)
+                        if (y < 63) .stone else .grass
+                    else if (y == 0) .grass else .air;
                 }
             }
         }
+        return world;
+    }
 
-        pub fn solid(self: *const @This(), x: i32, y: i32, z: i32) bool {
-            return self.get(x, y, z) != .air;
+    pub fn get(self: *const World, x: i32, y: i32, z: i32) Block {
+        if (x < 0 or x >= 64 or y < 0 or y >= 64 or z < 0 or z >= 64) return .air;
+        return self.blocks[@intCast(x)][@intCast(y)][@intCast(z)];
+    }
+
+    pub fn solid(self: *const World, x: i32, y: i32, z: i32) bool {
+        return self.get(x, y, z) != .air;
+    }
+
+    pub fn sweep(self: *const World, pos: Vec3, box: AABB, vel: Vec3, comptime steps: comptime_int) struct { pos: Vec3, vel: Vec3, hit: bool } {
+        var p = pos;
+        var v = vel;
+        var hit = false;
+        const dt: f32 = 1.0 / @as(f32, @floatFromInt(steps));
+        inline for (0..steps) |_| {
+            const r = self.step(p, box, v.scale(dt));
+            p = r.pos;
+            v = r.vel.scale(1.0 / dt);
+            if (r.hit) hit = true;
         }
+        return .{ .pos = p, .vel = v, .hit = hit };
+    }
 
-        pub fn sweep(self: *const @This(), pos: Vec3, box: AABB, vel: Vec3, comptime steps: comptime_int) struct { pos: Vec3, vel: Vec3, hit: bool } {
-            var p = pos;
-            var v = vel;
-            var hit = false;
-            const dt: f32 = 1.0 / @as(f32, @floatFromInt(steps));
-            inline for (0..steps) |_| {
-                const r = self.step(p, box, v.scale(dt));
-                p = r.pos;
-                v = r.vel.scale(1.0 / dt);
-                if (r.hit) hit = true;
-            }
-            return .{ .pos = p, .vel = v, .hit = hit };
-        }
-
-        fn step(self: *const @This(), pos: Vec3, box: AABB, vel: Vec3) struct { pos: Vec3, vel: Vec3, hit: bool } {
-            var p = pos;
-            var v = vel;
-            var hit = false;
-            for (0..3) |_| {
-                const player = box.at(p);
-                const region = player.bounds(v);
-                var closest: f32 = 1.0;
-                var n = Vec3.zero();
-                var found = false;
-                var bx = @as(i32, @intFromFloat(@floor(region.min.data[0])));
-                while (bx <= @as(i32, @intFromFloat(@floor(region.max.data[0])))) : (bx += 1) {
-                    var by = @as(i32, @intFromFloat(@floor(region.min.data[1])));
-                    while (by <= @as(i32, @intFromFloat(@floor(region.max.data[1])))) : (by += 1) {
-                        var bz = @as(i32, @intFromFloat(@floor(region.min.data[2])));
-                        while (bz <= @as(i32, @intFromFloat(@floor(region.max.data[2])))) : (bz += 1) {
-                            if (!self.solid(bx, by, bz)) continue;
-                            const b = Vec3.new(@floatFromInt(bx), @floatFromInt(by), @floatFromInt(bz));
-                            if (player.sweep(v, .{ .min = b, .max = b.add(Vec3.new(1, 1, 1)) })) |col| {
-                                if (col.t < closest) {
-                                    closest = col.t;
-                                    n = col.n;
-                                    found = true;
-                                }
+    fn step(self: *const World, pos: Vec3, box: AABB, vel: Vec3) struct { pos: Vec3, vel: Vec3, hit: bool } {
+        var p = pos;
+        var v = vel;
+        var hit = false;
+        for (0..3) |_| {
+            const player = box.at(p);
+            const region = player.bounds(v);
+            var closest: f32 = 1.0;
+            var n = Vec3.zero();
+            var found = false;
+            var bx = @as(i32, @intFromFloat(@floor(region.min.data[0])));
+            while (bx <= @as(i32, @intFromFloat(@floor(region.max.data[0])))) : (bx += 1) {
+                var by = @as(i32, @intFromFloat(@floor(region.min.data[1])));
+                while (by <= @as(i32, @intFromFloat(@floor(region.max.data[1])))) : (by += 1) {
+                    var bz = @as(i32, @intFromFloat(@floor(region.min.data[2])));
+                    while (bz <= @as(i32, @intFromFloat(@floor(region.max.data[2])))) : (bz += 1) {
+                        if (!self.solid(bx, by, bz)) continue;
+                        const b = Vec3.new(@floatFromInt(bx), @floatFromInt(by), @floatFromInt(bz));
+                        if (player.sweep(v, .{ .min = b, .max = b.add(Vec3.new(1, 1, 1)) })) |col| {
+                            if (col.t < closest) {
+                                closest = col.t;
+                                n = col.n;
+                                found = true;
                             }
                         }
                     }
                 }
-                if (!found) {
-                    p = p.add(v);
-                    break;
-                }
-                hit = true;
-                p = p.add(v.scale(@max(0, closest - 0.001)));
-                const dot = n.dot(v);
-                v.data[0] -= n.data[0] * dot;
-                v.data[1] -= n.data[1] * dot;
-                v.data[2] -= n.data[2] * dot;
-                if (@sqrt(v.dot(v)) < 0.0001) break;
             }
-            return .{ .pos = p, .vel = v, .hit = hit };
-        }
-
-        pub fn deinit(self: *@This()) void {
-            self.freeNode(&self.root);
-        }
-
-        fn freeNode(_: *@This(), node: *Node) void {
-            switch (node.*) {
-                .leaf => {},
-                .branch => |children| {
-                    for (children) |*child| {
-                        _ = child;
-                    }
-                    std.heap.page_allocator.destroy(children);
-                },
+            if (!found) {
+                p = p.add(v);
+                break;
             }
+            hit = true;
+            p = p.add(v.scale(@max(0, closest - 0.001)));
+            const dot = n.dot(v);
+            v.data[0] -= n.data[0] * dot;
+            v.data[1] -= n.data[1] * dot;
+            v.data[2] -= n.data[2] * dot;
+            if (@sqrt(v.dot(v)) < 0.0001) break;
         }
-    };
-}
+        return .{ .pos = p, .vel = v, .hit = hit };
+    }
+
+    pub fn deinit(_: *World) void {}
+};

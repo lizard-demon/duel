@@ -9,7 +9,7 @@ const rend = @import("world/render.zig");
 
 const V = alg.Vec3;
 const M = alg.Mat4;
-const W = octree.Octree(6);
+const W = octree.World;
 const shade = @import("shaders/cube.glsl.zig");
 
 const Player = struct {
@@ -41,12 +41,12 @@ const Player = struct {
         };
     }
 
-    fn update(p: *Player, w: *W, dt: f32) void {
+    fn update(p: *Player, w: *const W, dt: f32) void {
         p.handleInput(w, dt);
         p.updatePhysics(w, dt);
     }
 
-    fn handleInput(p: *Player, w: *W, dt: f32) void {
+    fn handleInput(p: *Player, w: *const W, dt: f32) void {
         const mv = p.io.vec2(.a, .d, .s, .w);
         var d = V.zero();
         if (mv.x != 0) d = d.add(V.new(@cos(p.yaw), 0, @sin(p.yaw)).scale(mv.x));
@@ -87,7 +87,7 @@ const Player = struct {
         if (p.on_ground) p.applyFriction(dt);
     }
 
-    fn updatePhysics(p: *Player, w: *W, dt: f32) void {
+    fn updatePhysics(p: *Player, w: *const W, dt: f32) void {
         p.vel.data[1] -= GRAVITY * dt;
         const ht = if (p.crouching) CROUCH_HEIGHT else HEIGHT;
         const r = w.sweep(p.pos, .{ .min = V.new(-0.4, -ht / 2, -0.4), .max = V.new(0.4, ht / 2, 0.4) }, p.vel.scale(dt), 3);
@@ -218,7 +218,7 @@ pub fn main() void {
         .height = 600,
         .sample_count = 4,
         .icon = .{ .sokol_default = true },
-        .window_title = "Octree Voxels",
+        .window_title = "Flat Array Voxels",
         .logger = .{ .func = sokol.log.func },
     });
 }
