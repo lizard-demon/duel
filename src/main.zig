@@ -1,3 +1,4 @@
+const std = @import("std");
 const sokol = @import("sokol");
 const sapp = sokol.app;
 
@@ -21,6 +22,7 @@ const Player = struct {
     crouching: bool,
     io: input.IO,
 
+    // Ultra-minimalist constants
     const GRAVITY: f32 = 20;
     const JUMP_FORCE: f32 = 8;
     const ACCEL: f32 = 10;
@@ -122,41 +124,54 @@ const Player = struct {
     }
 };
 
+// Ultra-minimalist static color lookup
+const BLOCK_COLORS = [_][3]f32{
+    .{ 0, 0, 0 }, // air (unused)
+    .{ 0.3, 0.7, 0.3 }, // grass
+    .{ 0.5, 0.35, 0.2 }, // dirt
+    .{ 0.5, 0.5, 0.5 }, // stone
+};
+
 fn cols(b: world.Block) [3]f32 {
-    return switch (b) {
-        .grass => .{ 0.3, 0.7, 0.3 },
-        .dirt => .{ 0.5, 0.35, 0.2 },
-        .stone => .{ 0.5, 0.5, 0.5 },
-        .air => unreachable,
-    };
+    return BLOCK_COLORS[@intFromEnum(b)];
 }
+
+// Static buffers for ultra-minimalist approach
+var static_verts: [65536]rend.Vertex = undefined;
+var static_indices: [98304]u16 = undefined;
+var static_buffer: [1024]u8 = undefined; // Fixed buffer for any potential allocations
 
 const Game = struct {
     pipe: rend.Renderer,
     vox: rend.Renderer,
     player: Player,
     w: W,
+    fba: std.heap.FixedBufferAllocator,
 
-    fn init() !Game {
+    fn init() Game {
         sokol.gfx.setup(.{
             .environment = sokol.glue.environment(),
             .logger = .{ .func = sokol.log.func },
         });
 
         var s: Game = undefined;
-        s.pipe = rend.Renderer.init(&[_]rend.Vertex{
+        s.fba = std.heap.FixedBufferAllocator.init(&static_buffer);
+
+        // Ground plane - fully static
+        const ground_verts = [_]rend.Vertex{
             .{ .pos = .{ -100, -1, -100 }, .col = .{ 0.1, 0.1, 0.12, 1 } },
             .{ .pos = .{ 100, -1, -100 }, .col = .{ 0.12, 0.15, 0.18, 1 } },
             .{ .pos = .{ 100, -1, 100 }, .col = .{ 0.15, 0.12, 0.15, 1 } },
             .{ .pos = .{ -100, -1, 100 }, .col = .{ 0.12, 0.12, 0.15, 1 } },
-        }, &[_]u16{ 0, 1, 2, 0, 2, 3 }, .{ 0.5, 0.7, 0.9, 1 });
+        };
+        const ground_indices = [_]u16{ 0, 1, 2, 0, 2, 3 };
+
+        s.pipe = rend.Renderer.init(&ground_verts, &ground_indices, .{ 0.5, 0.7, 0.9, 1 });
         s.player = Player.init();
         s.w = W.init();
 
-        var verts: [65536]rend.Vertex = undefined;
-        var indices: [98304]u16 = undefined;
-        const r = mesh.buildMesh(&s.w, &verts, &indices, cols);
-        s.vox = rend.Renderer.init(verts[0..r.vcount], indices[0..r.icount], .{ 0.5, 0.7, 0.9, 1 });
+        const r = mesh.buildMesh(&s.w, &static_verts, &static_indices, cols);
+        s.vox = rend.Renderer.init(static_verts[0..r.vcount], static_indices[0..r.icount], .{ 0.5, 0.7, 0.9, 1 });
 
         const sh = shade.cubeShaderDesc(sokol.gfx.queryBackend());
         s.pipe.shader(sh);
@@ -194,7 +209,7 @@ const Game = struct {
 
 var app: Game = undefined;
 export fn init() void {
-    app = Game.init() catch unreachable;
+    app = Game.init();
 }
 export fn frame() void {
     app.update();

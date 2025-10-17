@@ -9,7 +9,7 @@ pub fn buildMesh(
     indices: []u16,
     comptime colors: fn (Block) [3]f32,
 ) struct { vcount: usize, icount: usize } {
-    var mask: [4096]bool = undefined;
+    var mask: [4096]bool = std.mem.zeroes([4096]bool);
     var vi: usize = 0;
     var ii: usize = 0;
     const Axis = struct { d: u2, u: u2, v: u2 };
@@ -20,7 +20,7 @@ pub fn buildMesh(
     };
     const shades = [_]f32{ 0.8, 0.8, 1.0, 0.8, 0.8, 0.8 };
     for (axes, 0..) |ax, dir| {
-        const dim = [3]usize{ @intCast(world.size), @intCast(world.size), @intCast(world.size) };
+        const dim = [3]usize{ 64, 64, 64 };
         for (0..2) |back| {
             const stp: i32 = if (back == 0) 1 else -1;
             var d: i32 = if (back == 0) 0 else @as(i32, @intCast(dim[ax.d])) - 1;

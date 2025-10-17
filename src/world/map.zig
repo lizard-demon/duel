@@ -51,12 +51,13 @@ pub const AABB = struct {
     }
 };
 
+const WORLD_SIZE: i32 = 64;
+
 pub const World = struct {
     blocks: [64][64][64]Block,
-    size: i32 = 64,
 
     pub fn init() World {
-        var world = World{ .blocks = undefined };
+        var world = World{ .blocks = std.mem.zeroes([64][64][64]Block) };
         for (0..64) |x| {
             for (0..64) |y| {
                 for (0..64) |z| {
@@ -71,7 +72,7 @@ pub const World = struct {
     }
 
     pub fn get(self: *const World, x: i32, y: i32, z: i32) Block {
-        if (x < 0 or x >= 64 or y < 0 or y >= 64 or z < 0 or z >= 64) return .air;
+        if (x < 0 or x >= WORLD_SIZE or y < 0 or y >= WORLD_SIZE or z < 0 or z >= WORLD_SIZE) return .air;
         return self.blocks[@intCast(x)][@intCast(y)][@intCast(z)];
     }
 
