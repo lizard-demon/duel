@@ -173,7 +173,10 @@ const Game = struct {
         const r = mesh.buildMesh(&s.w, &static_verts, &static_indices, cols);
         s.vox = rend.Renderer.init(static_verts[0..r.vcount], static_indices[0..r.icount], .{ 0.5, 0.7, 0.9, 1 });
 
-        const sh = shade.cubeShaderDesc(sokol.gfx.queryBackend());
+        // Query the actual backend (WebGL or WebGPU for WASM)
+        const backend = sokol.gfx.queryBackend();
+
+        const sh = shade.cubeShaderDesc(backend);
         s.pipe.shader(sh);
         s.vox.shader(sh);
         return s;
