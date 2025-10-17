@@ -37,7 +37,7 @@ const App = struct {
             .{ .pos = .{ 100, -1, 100 }, .col = .{ 0.15, 0.12, 0.15, 1 } },
             .{ .pos = .{ -100, -1, 100 }, .col = .{ 0.12, 0.12, 0.15, 1 } },
         }, &[_]u16{ 0, 1, 2, 0, 2, 3 }, .{ 0.5, 0.7, 0.9, 1 });
-        s.cam = rend.Camera3D.init(V.new(32, 40, 32), 0, 0, 90);
+        s.cam = rend.Camera3D.init(V.new(32, 40, 32), 0, 0, 60);
         s.w = W.init();
 
         var verts: [65536]rend.Vertex = undefined;
