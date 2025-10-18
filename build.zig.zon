@@ -12,6 +12,10 @@
             .url = "git+https://github.com/floooh/sokol-tools-bin#a06f19929ff8f9824ec6dd87c21329b1f205809e",
             .hash = "sokolshdc-0.1.0-r2KZDr4qbAT_0SJoZpYt2S0-vHgOmOdU4ulPIeUt5Ato",
         },
+        .cimgui = .{
+            .url = "git+https://github.com/floooh/dcimgui.git#581c2e909c899c21923c779d4c41ea56ab93bbb4",
+            .hash = "cimgui-0.1.0-44ClkQ14kwAiwcr3ioDjxvPuiWQctWrt-tIFtsfP6xmU",
+        },
     },
     .paths = .{
         "build.zig",
