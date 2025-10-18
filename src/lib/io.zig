@@ -282,6 +282,7 @@ pub const Mouse = struct {
     left: bool = false,
     right: bool = false,
     middle: bool = false,
+    left_prev: bool = false,
     right_prev: bool = false,
     cursor: sapp.MouseCursor = .DEFAULT,
 
@@ -320,6 +321,10 @@ pub const Mouse = struct {
 
     pub fn rightPressed(self: *const Mouse) bool {
         return self.right and !self.right_prev;
+    }
+
+    pub fn leftPressed(self: *const Mouse) bool {
+        return self.left and !self.left_prev;
     }
 };
 
@@ -396,6 +401,7 @@ pub const IO = struct {
         @memcpy(&self.keys_prev, &self.keys);
 
         // Copy mouse state for justPressed detection
+        self.mouse.left_prev = self.mouse.left;
         self.mouse.right_prev = self.mouse.right;
 
         // Clear per-frame accumulated input

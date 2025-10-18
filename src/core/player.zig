@@ -141,10 +141,10 @@ pub const Player = struct {
                 if (w.raycast(p.pos, look, cfg.reach)) |hit| {
                     const pos = [3]i32{ @intFromFloat(@floor(hit.data[0])), @intFromFloat(@floor(hit.data[1])), @intFromFloat(@floor(hit.data[2])) };
 
-                    if (p.io.mouse.left and w.set(pos[0], pos[1], pos[2], 0)) {
+                    if (p.io.mouse.leftPressed() and w.set(pos[0], pos[1], pos[2], 0)) {
                         world_changed = true;
                         p.cool = cfg.block_cool;
-                    } else if (p.io.mouse.right) {
+                    } else if (p.io.mouse.rightPressed()) {
                         const prev = hit.sub(look.scale(0.1));
                         const place_pos = [3]i32{ @intFromFloat(@floor(prev.data[0])), @intFromFloat(@floor(prev.data[1])), @intFromFloat(@floor(prev.data[2])) };
                         if (w.set(place_pos[0], place_pos[1], place_pos[2], p.block)) {
