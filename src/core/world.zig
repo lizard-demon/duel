@@ -248,6 +248,4 @@ pub const World = struct {
         }
         return .{ .verts = vi, .indices = ii };
     }
-
-    pub fn deinit(_: *World) void {}
 };

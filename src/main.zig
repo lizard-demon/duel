@@ -16,18 +16,14 @@ const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
 const World = world.World;
 const Player = player.Player;
-const Weapon = player.Weapon;
 
 var verts: [65536]gfx.Vertex = undefined;
 var indices: [98304]u16 = undefined;
-var buf: [1024]u8 = undefined;
-
 const Game = struct {
     pipe: gfx.Render,
     vox: gfx.Render,
     player: Player,
     world: World,
-    alloc: std.heap.FixedBufferAllocator,
     mesh_dirty: bool,
     cube_shader: sokol.gfx.Shader,
 
@@ -36,13 +32,13 @@ const Game = struct {
         simgui.setup(.{ .logger = .{ .func = sokol.log.func } });
         if (use_docking) ig.igGetIO().*.ConfigFlags |= ig.ImGuiConfigFlags_DockingEnable;
 
-        const gv = [_]gfx.Vertex{ .{ .pos = .{ -100, -1, -100 }, .col = .{ 0.1, 0.1, 0.12, 1 } }, .{ .pos = .{ 100, -1, -100 }, .col = .{ 0.12, 0.15, 0.18, 1 } }, .{ .pos = .{ 100, -1, 100 }, .col = .{ 0.15, 0.12, 0.15, 1 } }, .{ .pos = .{ -100, -1, 100 }, .col = .{ 0.12, 0.12, 0.15, 1 } } };
+        const gv = [_]gfx.Vertex{ .{ .pos = .{ -100, -1, -100 }, .col = .{ 0.1, 0.1, 0.1, 1 } }, .{ .pos = .{ 100, -1, -100 }, .col = .{ 0.1, 0.1, 0.1, 1 } }, .{ .pos = .{ 100, -1, 100 }, .col = .{ 0.1, 0.1, 0.1, 1 } }, .{ .pos = .{ -100, -1, 100 }, .col = .{ 0.1, 0.1, 0.1, 1 } } };
         const gi = [_]u16{ 0, 1, 2, 0, 2, 3 };
         const sky = [4]f32{ 0.5, 0.7, 0.9, 1 };
 
         const sh_desc = shader.cubeShaderDesc(sokol.gfx.queryBackend());
         const sh = sokol.gfx.makeShader(sh_desc);
-        var g = Game{ .pipe = gfx.Render.init(&gv, &gi, sky), .player = Player.init(), .world = World.init(), .vox = undefined, .alloc = std.heap.FixedBufferAllocator.init(&buf), .mesh_dirty = false, .cube_shader = sh };
+        var g = Game{ .pipe = gfx.Render.init(&gv, &gi, sky), .player = Player.init(), .world = World.init(), .vox = undefined, .mesh_dirty = false, .cube_shader = sh };
 
         const r = g.world.mesh(&verts, &indices, World.color);
         g.vox = gfx.Render.init(verts[0..r.verts], indices[0..r.indices], sky);
@@ -86,7 +82,7 @@ const Game = struct {
     fn deinit(g: *Game) void {
         g.pipe.deinit();
         g.vox.deinit();
-        g.world.deinit();
+
         if (g.cube_shader.id != 0) sokol.gfx.destroyShader(g.cube_shader);
         simgui.shutdown();
         sokol.gfx.shutdown();

@@ -33,8 +33,8 @@ pub const Player = struct {
             const crosshair_size = 8.0;
             const hud_x = 10.0;
             const hud_y = 10.0;
-            const hud_w = 200.0;
-            const hud_h = 120.0;
+            const hud_w = 150.0;
+            const hud_h = 50.0;
         };
         const input = struct {
             const sens = 0.002;
@@ -90,11 +90,6 @@ pub const Player = struct {
         ig.igSetNextWindowSize(.{ .x = cfg.ui.hud_w, .y = cfg.ui.hud_h }, ig.ImGuiCond_Once);
         var show = true;
         if (ig.igBegin("HUD", &show, ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoCollapse)) {
-            _ = ig.igText("Pos: %.1f, %.1f, %.1f", p.pos.data[0], p.pos.data[1], p.pos.data[2]);
-            _ = ig.igText("Vel: %.1f, %.1f, %.1f", p.vel.data[0], p.vel.data[1], p.vel.data[2]);
-            _ = ig.igText("Ground: %s", if (p.ground) "Yes".ptr else "No".ptr);
-            _ = ig.igText("Crouch: %s", if (p.crouch) "Yes".ptr else "No".ptr);
-
             const block_color = world.World.color(p.block);
             _ = ig.igColorButton("##color_preview", .{ .x = block_color[0], .y = block_color[1], .z = block_color[2], .w = 1.0 }, ig.ImGuiColorEditFlags_NoTooltip);
             ig.igSameLine();
