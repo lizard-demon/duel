@@ -39,26 +39,45 @@ pub const AABB = struct {
 pub const World = struct {
     blocks: [64][64][64]Block,
 
+    fn hsvToRgb(h: f32, s: f32, v: f32) [3]f32 {
+        const c = v * s;
+        const x = c * (1.0 - @abs(@mod(h / 60.0, 2.0) - 1.0));
+        const m = v - c;
+
+        const rgb = if (h < 60.0) [3]f32{ c, x, 0 } else if (h < 120.0) [3]f32{ x, c, 0 } else if (h < 180.0) [3]f32{ 0, c, x } else if (h < 240.0) [3]f32{ 0, x, c } else if (h < 300.0) [3]f32{ x, 0, c } else [3]f32{ c, 0, x };
+
+        return .{ rgb[0] + m, rgb[1] + m, rgb[2] + m };
+    }
+
     pub fn color(block: Block) [3]f32 {
         if (block == 0) return .{ 0, 0, 0 }; // air
 
-        // Direct RGB mapping: treat block as 8-bit RGB332 (3 red, 3 green, 2 blue bits)
-        const r = (block >> 5) & 0x7; // 3 bits for red
-        const g = (block >> 2) & 0x7; // 3 bits for green
-        const b = block & 0x3; // 2 bits for blue
+        const idx = block - 1; // 0-254 range
 
-        return .{
-            @as(f32, @floatFromInt(r)) / 7.0,
-            @as(f32, @floatFromInt(g)) / 7.0,
-            @as(f32, @floatFromInt(b)) / 3.0,
-        };
+        // Single black + full HSV coverage
+        if (idx == 0) return .{ 0, 0, 0 }; // Pure black for color 1
+
+        const adjusted_idx = idx - 1; // 0-253 range for remaining colors
+        const h_steps = 6;
+        const s_steps = 6;
+        const v_steps = 7;
+
+        const h_idx = adjusted_idx % h_steps;
+        const s_idx = (adjusted_idx / h_steps) % s_steps;
+        const v_idx = adjusted_idx / (h_steps * s_steps);
+
+        const hue = @as(f32, @floatFromInt(h_idx)) / @as(f32, h_steps) * 360.0;
+        const sat = @as(f32, @floatFromInt(s_idx)) / @as(f32, s_steps - 1);
+        const val = 0.2 + @as(f32, @floatFromInt(v_idx)) / @as(f32, v_steps - 1) * 0.8; // 0.2-1.0 (avoid more blacks)
+
+        return hsvToRgb(hue, sat, val);
     }
     pub fn init() World {
         var w = World{ .blocks = std.mem.zeroes([64][64][64]Block) };
         for (0..64) |x| for (0..64) |y| for (0..64) |z| {
             const wall = x == 0 or x == 63 or z == 0 or z == 63;
             const floor = y == 0;
-            w.blocks[x][y][z] = if (wall and y < 63) 0b11100000 else if (floor) 0b00011100 else 0;
+            w.blocks[x][y][z] = if (wall and y < 63) 110 else if (floor) 100 else 0;
         };
         return w;
     }

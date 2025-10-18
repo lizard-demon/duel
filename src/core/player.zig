@@ -30,6 +30,8 @@ pub const Player = struct {
         };
         const ui = struct {
             const crosshair_size = 8.0;
+            const crosshair_color = [3]f32{ 1.0, 1.0, 1.0 };
+            const crosshair_alpha = 0.8;
             const hud_x = 10.0;
             const hud_y = 10.0;
             const hud_w = 150.0;
@@ -78,7 +80,7 @@ pub const Player = struct {
             const dl = ig.igGetWindowDrawList();
             const cx, const cy = .{ w * 0.5, h * 0.5 };
             const size = cfg.ui.crosshair_size;
-            const col = ig.igColorConvertFloat4ToU32(.{ .x = 1, .y = 1, .z = 1, .w = 0.8 });
+            const col = ig.igColorConvertFloat4ToU32(.{ .x = cfg.ui.crosshair_color[0], .y = cfg.ui.crosshair_color[1], .z = cfg.ui.crosshair_color[2], .w = cfg.ui.crosshair_alpha });
             ig.ImDrawList_AddLine(dl, .{ .x = cx - size, .y = cy }, .{ .x = cx + size, .y = cy }, col);
             ig.ImDrawList_AddLine(dl, .{ .x = cx, .y = cy - size }, .{ .x = cx, .y = cy + size }, col);
         }
