@@ -3,50 +3,40 @@ const rend = @import("render.zig");
 const octree = @import("map.zig");
 const Block = octree.Block;
 
-pub fn buildMesh(
-    world: anytype,
-    verts: []rend.Vertex,
-    indices: []u16,
-    comptime colors: fn (Block) [3]f32,
-) struct { vcount: usize, icount: usize } {
+pub fn buildMesh(w: anytype, verts: []rend.Vertex, indices: []u16, comptime colors: fn (Block) [3]f32) struct { vcount: usize, icount: usize } {
     var mask: [4096]bool = std.mem.zeroes([4096]bool);
     var vi: usize = 0;
     var ii: usize = 0;
     const Axis = struct { d: u2, u: u2, v: u2 };
-    const axes = [_]Axis{
-        .{ .d = 0, .u = 2, .v = 1 }, .{ .d = 0, .u = 1, .v = 2 },
-        .{ .d = 1, .u = 0, .v = 2 }, .{ .d = 1, .u = 2, .v = 0 },
-        .{ .d = 2, .u = 0, .v = 1 }, .{ .d = 2, .u = 1, .v = 0 },
-    };
+    const axes = [_]Axis{ .{ .d = 0, .u = 2, .v = 1 }, .{ .d = 0, .u = 1, .v = 2 }, .{ .d = 1, .u = 0, .v = 2 }, .{ .d = 1, .u = 2, .v = 0 }, .{ .d = 2, .u = 0, .v = 1 }, .{ .d = 2, .u = 1, .v = 0 } };
     const shades = [_]f32{ 0.8, 0.8, 1.0, 0.8, 0.8, 0.8 };
     for (axes, 0..) |ax, dir| {
-        const dim = [3]usize{ 64, 64, 64 };
         for (0..2) |back| {
             const stp: i32 = if (back == 0) 1 else -1;
-            var d: i32 = if (back == 0) 0 else @as(i32, @intCast(dim[ax.d])) - 1;
-            while ((back == 0 and d < @as(i32, @intCast(dim[ax.d]))) or (back == 1 and d >= 0)) : (d += stp) {
+            var d: i32 = if (back == 0) 0 else 63;
+            while ((back == 0 and d < 64) or (back == 1 and d >= 0)) : (d += stp) {
                 var n: usize = 0;
-                for (0..dim[ax.v]) |v| {
-                    for (0..dim[ax.u]) |u| {
+                for (0..64) |v| {
+                    for (0..64) |u| {
                         var pos = [3]i32{ 0, 0, 0 };
                         pos[ax.d] = d;
                         pos[ax.u] = @intCast(u);
                         pos[ax.v] = @intCast(v);
-                        const blk = world.get(pos[0], pos[1], pos[2]);
+                        const blk = w.get(pos[0], pos[1], pos[2]);
                         if (blk == .air) {
                             mask[n] = false;
                             n += 1;
                             continue;
                         }
                         pos[ax.d] += stp;
-                        mask[n] = world.get(pos[0], pos[1], pos[2]) == .air;
+                        mask[n] = w.get(pos[0], pos[1], pos[2]) == .air;
                         n += 1;
                     }
                 }
                 n = 0;
-                for (0..dim[ax.v]) |v| {
+                for (0..64) |v| {
                     var u: usize = 0;
-                    while (u < dim[ax.u]) {
+                    while (u < 64) {
                         if (!mask[n]) {
                             n += 1;
                             u += 1;
@@ -56,21 +46,21 @@ pub fn buildMesh(
                         pos[ax.d] = d;
                         pos[ax.u] = @intCast(u);
                         pos[ax.v] = @intCast(v);
-                        const blk = world.get(pos[0], pos[1], pos[2]);
-                        var w: usize = 1;
-                        while (u + w < dim[ax.u] and mask[n + w]) : (w += 1) {
+                        const blk = w.get(pos[0], pos[1], pos[2]);
+                        var wid: usize = 1;
+                        while (u + wid < 64 and mask[n + wid]) : (wid += 1) {
                             var p2 = pos;
-                            p2[ax.u] = @intCast(u + w);
-                            if (world.get(p2[0], p2[1], p2[2]) != blk) break;
+                            p2[ax.u] = @intCast(u + wid);
+                            if (w.get(p2[0], p2[1], p2[2]) != blk) break;
                         }
                         var h: usize = 1;
-                        outer: while (v + h < dim[ax.v]) : (h += 1) {
-                            for (0..w) |k| {
-                                if (!mask[n + k + h * dim[ax.u]]) break :outer;
+                        outer: while (v + h < 64) : (h += 1) {
+                            for (0..wid) |k| {
+                                if (!mask[n + k + h * 64]) break :outer;
                                 var p2 = pos;
                                 p2[ax.u] = @intCast(u + k);
                                 p2[ax.v] = @intCast(v + h);
-                                if (world.get(p2[0], p2[1], p2[2]) != blk) break :outer;
+                                if (w.get(p2[0], p2[1], p2[2]) != blk) break :outer;
                             }
                         }
                         const col = colors(blk);
@@ -79,7 +69,7 @@ pub fn buildMesh(
                         var quad = [4][3]f32{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } };
                         var du = [3]f32{ 0, 0, 0 };
                         var dv = [3]f32{ 0, 0, 0 };
-                        du[ax.u] = @floatFromInt(w);
+                        du[ax.u] = @floatFromInt(wid);
                         dv[ax.v] = @floatFromInt(h);
                         const x: f32 = @floatFromInt(pos[0]);
                         const y: f32 = @floatFromInt(pos[1]);
@@ -106,10 +96,10 @@ pub fn buildMesh(
                             ii += 1;
                         }
                         for (0..h) |j| {
-                            for (0..w) |i| mask[n + i + j * dim[ax.u]] = false;
+                            for (0..wid) |i| mask[n + i + j * 64] = false;
                         }
-                        n += w;
-                        u += w;
+                        n += wid;
+                        u += wid;
                     }
                 }
             }
