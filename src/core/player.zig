@@ -34,10 +34,10 @@ pub const Player = struct {
             const crosshair_size = 8.0;
             const crosshair_color = [3]f32{ 1.0, 1.0, 1.0 };
             const crosshair_alpha = 0.8;
-            const hud_x = 10.0;
-            const hud_y = 10.0;
-            const hud_w = 160.0;
-            const hud_h = 50.0;
+            const hud_x = 16.0;
+            const hud_y = 16.0;
+            const hud_w = 120.0;
+            const hud_h = 70.0;
         };
         const input = struct {
             const sens = 0.002;
@@ -90,15 +90,35 @@ pub const Player = struct {
         }
         ig.igEnd();
 
-        // HUD
-        ig.igSetNextWindowPos(.{ .x = cfg.ui.hud_x, .y = cfg.ui.hud_y }, ig.ImGuiCond_Once);
-        ig.igSetNextWindowSize(.{ .x = cfg.ui.hud_w, .y = cfg.ui.hud_h }, ig.ImGuiCond_Once);
-        var show = true;
-        if (ig.igBegin("HUD", &show, ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoCollapse)) {
+        // Game HUD
+        ig.igSetNextWindowPos(.{ .x = cfg.ui.hud_x, .y = cfg.ui.hud_y }, ig.ImGuiCond_Always);
+        ig.igSetNextWindowSize(.{ .x = cfg.ui.hud_w, .y = cfg.ui.hud_h }, ig.ImGuiCond_Always);
+        const hud_flags = ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar | ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoInputs;
+        if (ig.igBegin("GameHUD", null, hud_flags)) {
+            const dl = ig.igGetWindowDrawList();
             const block_color = world.World.color(p.block);
-            _ = ig.igColorButton("##color_preview", .{ .x = block_color[0], .y = block_color[1], .z = block_color[2], .w = 1.0 }, ig.ImGuiColorEditFlags_NoTooltip);
-            ig.igSameLine();
-            _ = ig.igText("Color %d (Q/E)", p.block);
+
+            // Draw elegant color swatch with subtle border
+            const swatch_size = 24.0;
+            const swatch_x = cfg.ui.hud_x + 8;
+            const swatch_y = cfg.ui.hud_y + 8;
+            const color_u32 = ig.igColorConvertFloat4ToU32(.{ .x = block_color[0], .y = block_color[1], .z = block_color[2], .w = 1.0 });
+            const border_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 0.3 });
+
+            // Color swatch
+            ig.ImDrawList_AddRectFilled(dl, .{ .x = swatch_x, .y = swatch_y }, .{ .x = swatch_x + swatch_size, .y = swatch_y + swatch_size }, color_u32);
+            ig.ImDrawList_AddRect(dl, .{ .x = swatch_x, .y = swatch_y }, .{ .x = swatch_x + swatch_size, .y = swatch_y + swatch_size }, border_color);
+
+            // Block ID text below the color swatch
+            const text_x = swatch_x;
+            const text_y = swatch_y + swatch_size + 6;
+            const text_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 0.9 });
+            ig.ImDrawList_AddText(dl, .{ .x = text_x, .y = text_y }, text_color, "Block");
+
+            const id_color = ig.igColorConvertFloat4ToU32(.{ .x = 0.8, .y = 0.8, .z = 0.8, .w = 0.7 });
+            var buf: [16]u8 = undefined;
+            const id_str = std.fmt.bufPrintZ(&buf, "#{d}", .{p.block}) catch "###";
+            ig.ImDrawList_AddText(dl, .{ .x = text_x, .y = text_y + 12 }, id_color, id_str.ptr);
         }
         ig.igEnd();
     }
