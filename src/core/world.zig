@@ -82,7 +82,7 @@ pub const World = struct {
         for (0..64) |x| for (0..64) |y| for (0..64) |z| {
             const is_wall = x == 0 or x == 63 or z == 0 or z == 63;
             const is_floor = y == 0;
-            w.blocks[x][y][z] = if (is_wall and y < 63) 110 else if (is_floor) 100 else 0;
+            w.blocks[x][y][z] = if (is_wall and y <= 2) 110 else if (is_floor) 100 else 0;
         };
         return w;
     }

@@ -24,9 +24,9 @@ pub const Player = struct {
 
     const cfg = struct {
         const spawn = struct {
-            const x = 32.0;
-            const y = 40.0;
-            const z = 32.0;
+            const x = 58.0;
+            const y = 3.0;
+            const z = 58.0;
         };
         const ui = struct {
             const crosshair_size = 8.0;
@@ -67,6 +67,7 @@ pub const Player = struct {
 
         const reach = 5.0;
         const block_cool = 0.15;
+        const respawn_y = -1.0;
     };
 
     pub fn drawUI(p: *const Player) void {
@@ -189,6 +190,8 @@ pub const Player = struct {
         p.pos = r.pos;
         p.vel = r.vel.scale(1 / dt);
         p.ground = r.hit and @abs(r.vel.data[1]) < cfg.phys.ground_thresh;
+
+        if (p.pos.data[1] < cfg.respawn_y) p.respawn();
     }
 
     fn friction(p: *Player, dt: f32) void {
@@ -201,6 +204,10 @@ pub const Player = struct {
         const f = @max(0, s - @max(s, cfg.friction.min_speed) * cfg.friction.factor * dt) / s;
         p.vel.data[0] *= f;
         p.vel.data[2] *= f;
+    }
+
+    fn respawn(p: *Player) void {
+        p.* = .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .io = p.io, .block = p.block, .cool = 0 };
     }
 
     pub fn view(p: *Player) Mat4 {
