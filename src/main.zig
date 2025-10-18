@@ -12,9 +12,9 @@ const mesh = @import("world/mesh.zig");
 const rend = @import("world/render.zig");
 const shade = @import("shaders/cube.glsl.zig");
 
-const V = alg.Vec3;
-const M = alg.Mat4;
-const W = world.World;
+const Vec3 = alg.Vec3;
+const Mat4 = alg.Mat4;
+const World = world.World;
 
 const Weapon = struct {
     charge: f32 = 0,
@@ -45,8 +45,8 @@ const Weapon = struct {
 };
 
 pub const Player = struct {
-    pos: V,
-    vel: V,
+    pos: Vec3,
+    vel: Vec3,
     yaw: f32,
     pitch: f32,
     on_ground: bool,
@@ -110,8 +110,8 @@ pub const Player = struct {
 
     fn init() Player {
         return .{
-            .pos = V.new(32, 40, 32),
-            .vel = V.zero(),
+            .pos = Vec3.new(32, 40, 32),
+            .vel = Vec3.zero(),
             .yaw = 0,
             .pitch = 0,
             .on_ground = false,
@@ -121,25 +121,25 @@ pub const Player = struct {
         };
     }
 
-    fn update(p: *Player, w: *const W, dt: f32) void {
+    fn update(p: *Player, w: *const World, dt: f32) void {
         p.handleInput(w, dt);
         p.updatePhysics(w, dt);
         p.weapon.update(dt, p.io.mouse.right and p.io.mouse.isLocked());
     }
 
-    fn handleInput(p: *Player, w: *const W, dt: f32) void {
+    fn handleInput(p: *Player, w: *const World, dt: f32) void {
         const mv = p.io.vec2(.a, .d, .s, .w);
-        var d = V.zero();
-        if (mv.x != 0) d = d.add(V.new(@cos(p.yaw), 0, @sin(p.yaw)).scale(mv.x));
-        if (mv.y != 0) d = d.add(V.new(@sin(p.yaw), 0, -@cos(p.yaw)).scale(mv.y));
+        var d = Vec3.zero();
+        if (mv.x != 0) d = d.add(Vec3.new(@cos(p.yaw), 0, @sin(p.yaw)).scale(mv.x));
+        if (mv.y != 0) d = d.add(Vec3.new(@sin(p.yaw), 0, -@cos(p.yaw)).scale(mv.y));
         p.move(d, dt);
 
         const want_crouch = p.io.shift();
         if (p.crouching and !want_crouch) {
             const height_diff = (HEIGHT - CROUCH) / 2;
-            const test_pos = V.new(p.pos.data[0], p.pos.data[1] + height_diff, p.pos.data[2]);
-            const bbox = world.AABB{ .min = V.new(-0.4, -HEIGHT / 2, -0.4), .max = V.new(0.4, HEIGHT / 2, 0.4) };
-            const r = w.sweep(test_pos, bbox, V.zero(), 1);
+            const test_pos = Vec3.new(p.pos.data[0], p.pos.data[1] + height_diff, p.pos.data[2]);
+            const bbox = world.AABB{ .min = Vec3.new(-0.4, -HEIGHT / 2, -0.4), .max = Vec3.new(0.4, HEIGHT / 2, 0.4) };
+            const r = w.sweep(test_pos, bbox, Vec3.zero(), 1);
             if (!r.hit) p.pos.data[1] += height_diff;
             p.crouching = r.hit;
         } else p.crouching = want_crouch;
@@ -161,11 +161,11 @@ pub const Player = struct {
         if (p.io.mouse.left and !p.io.mouse.isLocked()) p.io.mouse.lock();
     }
 
-    fn move(p: *Player, d: V, dt: f32) void {
+    fn move(p: *Player, d: Vec3, dt: f32) void {
         const l = @sqrt(d.data[0] * d.data[0] + d.data[2] * d.data[2]);
         if (l < 0.001) return if (p.on_ground) p.applyFriction(dt);
 
-        const w = V.new(d.data[0] / l, 0, d.data[2] / l);
+        const w = Vec3.new(d.data[0] / l, 0, d.data[2] / l);
         const max_add = if (p.on_ground) SPEED * l else @min(SPEED * l, 0.7);
         const add = @max(0, max_add - p.vel.dot(w));
 
@@ -173,10 +173,10 @@ pub const Player = struct {
         if (p.on_ground) p.applyFriction(dt);
     }
 
-    fn updatePhysics(p: *Player, w: *const W, dt: f32) void {
+    fn updatePhysics(p: *Player, w: *const World, dt: f32) void {
         p.vel.data[1] -= GRAVITY * dt;
         const ht = if (p.crouching) CROUCH else HEIGHT;
-        const bbox = world.AABB{ .min = V.new(-0.4, -ht / 2, -0.4), .max = V.new(0.4, ht / 2, 0.4) };
+        const bbox = world.AABB{ .min = Vec3.new(-0.4, -ht / 2, -0.4), .max = Vec3.new(0.4, ht / 2, 0.4) };
         const r = w.sweep(p.pos, bbox, p.vel.scale(dt), 3);
         p.pos = r.pos;
         p.vel = r.vel.scale(1 / dt);
@@ -201,7 +201,7 @@ pub const Player = struct {
         const cp = @cos(p.pitch);
         const sp = @sin(p.pitch);
 
-        const dir = V.new(sy * cp, -sp, -cy * cp);
+        const dir = Vec3.new(sy * cp, -sp, -cy * cp);
         const force = 12.5 * power * power;
         p.vel = p.vel.add(dir.scale(-force));
 
@@ -211,7 +211,7 @@ pub const Player = struct {
         }
     }
 
-    fn getViewMatrix(p: *Player) M {
+    fn getViewMatrix(p: *Player) Mat4 {
         const cy = @cos(p.yaw);
         const sy = @sin(p.yaw);
         const cp = @cos(p.pitch);
@@ -233,7 +233,7 @@ const Game = struct {
     pipe: rend.Renderer,
     vox: rend.Renderer,
     player: Player,
-    w: W,
+    w: World,
     fba: std.heap.FixedBufferAllocator,
 
     fn init() Game {
@@ -254,12 +254,12 @@ const Game = struct {
         var s = Game{
             .pipe = rend.Renderer.init(&ground_verts, &ground_indices, sky_color),
             .player = Player.init(),
-            .w = W.init(),
+            .w = World.init(),
             .vox = undefined,
             .fba = std.heap.FixedBufferAllocator.init(&static_buffer),
         };
 
-        const r = mesh.buildMesh(&s.w, &static_verts, &static_indices, W.blockColor);
+        const r = mesh.buildMesh(&s.w, &static_verts, &static_indices, World.blockColor);
         s.vox = rend.Renderer.init(static_verts[0..r.vcount], static_indices[0..r.icount], sky_color);
 
         const sh = shade.cubeShaderDesc(sokol.gfx.queryBackend());
@@ -283,7 +283,7 @@ const Game = struct {
 
         Player.UI.drawHUD(&s.player);
 
-        const mvp = M.mul(alg.perspective(90, sapp.widthf() / sapp.heightf(), 0.1, 1000), s.player.getViewMatrix());
+        const mvp = Mat4.mul(alg.perspective(90, sapp.widthf() / sapp.heightf(), 0.1, 1000), s.player.getViewMatrix());
 
         sokol.gfx.beginPass(.{ .action = s.pipe.pass, .swapchain = sokol.glue.swapchain() });
         s.pipe.draw(mvp);
