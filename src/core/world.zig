@@ -73,67 +73,14 @@ pub const World = struct {
         return true;
     }
 
-    pub const RaycastResult = struct {
-        hit: bool,
-        pos: Vec3,
-        block_pos: Vec3,
-        normal: Vec3,
-        distance: f32,
-        block: Block,
-    };
-
-    pub fn raycast(w: *const World, origin: Vec3, direction: Vec3, max_distance: f32) RaycastResult {
-        const step_size = 0.1;
-        const steps = @as(i32, @intFromFloat(max_distance / step_size));
-
-        var current = origin;
-        var prev = origin;
-
-        for (0..@intCast(steps)) |_| {
-            prev = current;
-            current = current.add(direction.scale(step_size));
-
-            const x = @as(i32, @intFromFloat(@floor(current.data[0])));
-            const y = @as(i32, @intFromFloat(@floor(current.data[1])));
-            const z = @as(i32, @intFromFloat(@floor(current.data[2])));
-
-            if (w.solid(x, y, z)) {
-                const block_center = Vec3.new(@as(f32, @floatFromInt(x)) + 0.5, @as(f32, @floatFromInt(y)) + 0.5, @as(f32, @floatFromInt(z)) + 0.5);
-                const to_hit = current.sub(block_center);
-
-                // Determine which face was hit by finding the largest component
-                var normal = Vec3.zero();
-                const abs_x = @abs(to_hit.data[0]);
-                const abs_y = @abs(to_hit.data[1]);
-                const abs_z = @abs(to_hit.data[2]);
-
-                if (abs_x >= abs_y and abs_x >= abs_z) {
-                    normal.data[0] = if (to_hit.data[0] > 0) 1 else -1;
-                } else if (abs_y >= abs_z) {
-                    normal.data[1] = if (to_hit.data[1] > 0) 1 else -1;
-                } else {
-                    normal.data[2] = if (to_hit.data[2] > 0) 1 else -1;
-                }
-
-                return RaycastResult{
-                    .hit = true,
-                    .pos = prev,
-                    .block_pos = Vec3.new(@as(f32, @floatFromInt(x)), @as(f32, @floatFromInt(y)), @as(f32, @floatFromInt(z))),
-                    .normal = normal,
-                    .distance = origin.sub(prev).length(),
-                    .block = w.get(x, y, z),
-                };
-            }
+    pub fn raycast(w: *const World, pos: Vec3, dir: Vec3, dist: f32) ?Vec3 {
+        var p = pos;
+        for (0..@intFromFloat(dist * 10)) |_| {
+            p = p.add(dir.scale(0.1));
+            const x, const y, const z = .{ @as(i32, @intFromFloat(@floor(p.data[0]))), @as(i32, @intFromFloat(@floor(p.data[1]))), @as(i32, @intFromFloat(@floor(p.data[2]))) };
+            if (w.solid(x, y, z)) return p;
         }
-
-        return RaycastResult{
-            .hit = false,
-            .pos = Vec3.zero(),
-            .block_pos = Vec3.zero(),
-            .normal = Vec3.zero(),
-            .distance = max_distance,
-            .block = .air,
-        };
+        return null;
     }
 
     pub fn sweep(w: *const World, pos: Vec3, box: AABB, vel: Vec3, comptime steps: comptime_int) struct { pos: Vec3, vel: Vec3, hit: bool } {

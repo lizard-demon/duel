@@ -45,8 +45,8 @@ pub const Player = struct {
     crouch: bool,
     weapon: Weapon,
     io: io.IO,
-    selected_block: world.Block,
-    interact_cooldown: f32,
+    block: world.Block,
+    cool: f32,
 
     const cfg = struct {
         const spawn = struct {
@@ -97,12 +97,8 @@ pub const Player = struct {
             const jump_min = 0.5;
             const jump_boost = 2.0;
         };
-        const reach = struct {
-            const distance = 5.0;
-        };
-        const interact = struct {
-            const cooldown = 0.15;
-        };
+        const reach = 5.0;
+        const block_cool = 0.15;
     };
 
     pub fn drawUI(p: *const Player) void {
@@ -133,27 +129,21 @@ pub const Player = struct {
             _ = ig.igText("Ground: %s", if (p.ground) "Yes".ptr else "No".ptr);
             _ = ig.igText("Crouch: %s", if (p.crouch) "Yes".ptr else "No".ptr);
             _ = ig.igText("Charge: %.2f", p.weapon.charge);
-            const block_name = switch (p.selected_block) {
-                .air => "Air",
-                .grass => "Grass",
-                .dirt => "Dirt",
-                .stone => "Stone",
-            };
-            _ = ig.igText("Selected: %s", block_name.ptr);
+            _ = ig.igText("Block: %d", @intFromEnum(p.block));
         }
         ig.igEnd();
     }
 
     pub fn init() Player {
-        return .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .weapon = .{}, .io = .{}, .selected_block = .stone, .interact_cooldown = 0 };
+        return .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .weapon = .{}, .io = .{}, .block = .stone, .cool = 0 };
     }
 
     pub fn tick(p: *Player, w: *World, dt: f32) bool {
-        p.interact_cooldown = @max(0, p.interact_cooldown - dt);
-        const world_changed = p.input(w, dt);
+        p.cool = @max(0, p.cool - dt);
+        const changed = p.input(w, dt);
         p.physics(w, dt);
         p.weapon.tick(dt, p.io.mouse.right and p.io.mouse.locked());
-        return world_changed;
+        return changed;
     }
 
     fn input(p: *Player, w: *World, dt: f32) bool {
@@ -185,46 +175,27 @@ pub const Player = struct {
             if (p.io.mouse.left and p.weapon.charge > cfg.input.fire_min) if (p.weapon.fire()) |power| p.shoot(power);
 
             // Block interactions
-            if (p.interact_cooldown == 0) {
-                const look_dir = p.getLookDirection();
-                const ray_result = w.raycast(p.pos, look_dir, cfg.reach.distance);
-
-                if (ray_result.hit) {
-                    // Break block with left click (when not shooting)
-                    if (p.io.mouse.left and p.weapon.charge <= cfg.input.fire_min) {
-                        const bx = @as(i32, @intFromFloat(ray_result.block_pos.data[0]));
-                        const by = @as(i32, @intFromFloat(ray_result.block_pos.data[1]));
-                        const bz = @as(i32, @intFromFloat(ray_result.block_pos.data[2]));
-                        if (w.set(bx, by, bz, .air)) {
+            if (p.cool == 0 and p.weapon.charge < cfg.input.fire_min) {
+                const look = Vec3.new(@sin(p.yaw) * @cos(p.pitch), -@sin(p.pitch), -@cos(p.yaw) * @cos(p.pitch));
+                if (w.raycast(p.pos, look, cfg.reach)) |hit| {
+                    const x, const y, const z = .{ @as(i32, @intFromFloat(@floor(hit.data[0]))), @as(i32, @intFromFloat(@floor(hit.data[1]))), @as(i32, @intFromFloat(@floor(hit.data[2]))) };
+                    if (p.io.mouse.left and w.set(x, y, z, .air)) {
+                        world_changed = true;
+                        p.cool = cfg.block_cool;
+                    } else if (p.io.mouse.right and p.weapon.charge == 0) {
+                        const prev = hit.sub(look.scale(0.1));
+                        const px, const py, const pz = .{ @as(i32, @intFromFloat(@floor(prev.data[0]))), @as(i32, @intFromFloat(@floor(prev.data[1]))), @as(i32, @intFromFloat(@floor(prev.data[2]))) };
+                        if (w.set(px, py, pz, p.block)) {
                             world_changed = true;
-                            p.interact_cooldown = cfg.interact.cooldown;
-                        }
-                    }
-                    // Place block with right click (when not charging weapon)
-                    else if (p.io.mouse.right and p.weapon.charge == 0) {
-                        const place_pos = ray_result.block_pos.add(ray_result.normal);
-                        const px = @as(i32, @intFromFloat(place_pos.data[0]));
-                        const py = @as(i32, @intFromFloat(place_pos.data[1]));
-                        const pz = @as(i32, @intFromFloat(place_pos.data[2]));
-
-                        // Don't place blocks inside the player
-                        const player_box = world.AABB{ .min = Vec3.new(-cfg.size.width, -cfg.size.stand / 2.0, -cfg.size.width), .max = Vec3.new(cfg.size.width, cfg.size.stand / 2.0, cfg.size.width) };
-                        const block_box = world.AABB{ .min = place_pos, .max = place_pos.add(Vec3.new(1, 1, 1)) };
-
-                        if (!p.intersectsAABB(player_box.at(p.pos), block_box)) {
-                            if (w.set(px, py, pz, p.selected_block)) {
-                                world_changed = true;
-                                p.interact_cooldown = cfg.interact.cooldown;
-                            }
+                            p.cool = cfg.block_cool;
                         }
                     }
                 }
             }
 
-            // Block selection with number keys
-            if (p.io.justPressed(._1)) p.selected_block = .grass;
-            if (p.io.justPressed(._2)) p.selected_block = .dirt;
-            if (p.io.justPressed(._3)) p.selected_block = .stone;
+            if (p.io.justPressed(._1)) p.block = .grass;
+            if (p.io.justPressed(._2)) p.block = .dirt;
+            if (p.io.justPressed(._3)) p.block = .stone;
         }
         if (p.io.justPressed(.escape)) p.io.mouse.unlock();
         if (p.io.mouse.left and !p.io.mouse.locked()) p.io.mouse.lock();
@@ -272,18 +243,6 @@ pub const Player = struct {
             p.vel.data[1] += cfg.shoot.jump_boost * power;
             p.ground = false;
         }
-    }
-
-    fn getLookDirection(p: *const Player) Vec3 {
-        const cy, const sy, const cp, const sp = .{ @cos(p.yaw), @sin(p.yaw), @cos(p.pitch), @sin(p.pitch) };
-        return Vec3.new(sy * cp, -sp, -cy * cp);
-    }
-
-    fn intersectsAABB(p: *const Player, a: world.AABB, b: world.AABB) bool {
-        _ = p;
-        return a.min.data[0] < b.max.data[0] and a.max.data[0] > b.min.data[0] and
-            a.min.data[1] < b.max.data[1] and a.max.data[1] > b.min.data[1] and
-            a.min.data[2] < b.max.data[2] and a.max.data[2] > b.min.data[2];
     }
 
     pub fn view(p: *Player) Mat4 {
