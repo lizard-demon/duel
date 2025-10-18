@@ -67,10 +67,6 @@ pub const World = struct {
         return w.blocks[@intCast(x)][@intCast(y)][@intCast(z)];
     }
 
-    pub fn solid(w: *const World, x: i32, y: i32, z: i32) bool {
-        return w.get(x, y, z) != 0;
-    }
-
     pub fn set(w: *World, x: i32, y: i32, z: i32, block: Block) bool {
         if (x < 0 or x >= 64 or y < 0 or y >= 64 or z < 0 or z >= 64) return false;
         const old_block = w.blocks[@intCast(x)][@intCast(y)][@intCast(z)];
@@ -84,7 +80,7 @@ pub const World = struct {
         for (0..@intFromFloat(dist * 10)) |_| {
             p = p.add(dir.scale(0.1));
             const x, const y, const z = .{ @as(i32, @intFromFloat(@floor(p.data[0]))), @as(i32, @intFromFloat(@floor(p.data[1]))), @as(i32, @intFromFloat(@floor(p.data[2]))) };
-            if (w.solid(x, y, z)) return p;
+            if (w.get(x, y, z) != 0) return p;
         }
         return null;
     }
@@ -119,7 +115,7 @@ pub const World = struct {
                 while (y <= @as(i32, @intFromFloat(@floor(rg.max.data[1])))) : (y += 1) {
                     var z = @as(i32, @intFromFloat(@floor(rg.min.data[2])));
                     while (z <= @as(i32, @intFromFloat(@floor(rg.max.data[2])))) : (z += 1) {
-                        if (!w.solid(x, y, z)) continue;
+                        if (w.get(x, y, z) == 0) continue;
                         const b = Vec3.new(@as(f32, @floatFromInt(x)), @as(f32, @floatFromInt(y)), @as(f32, @floatFromInt(z)));
                         if (pl.sweep(v, .{ .min = b, .max = b.add(Vec3.new(1, 1, 1)) })) |col| if (col.t < c) {
                             c = col.t;

@@ -1,8 +1,7 @@
 const std = @import("std");
 const sokol = @import("sokol");
 const sapp = sokol.app;
-const use_docking = @import("build_options").docking;
-const ig = if (use_docking) @import("cimgui_docking") else @import("cimgui");
+const ig = @import("cimgui");
 const math = @import("../lib/math.zig");
 const io = @import("../lib/io.zig");
 const world = @import("world.zig");
@@ -158,10 +157,10 @@ pub const Player = struct {
 
             // Color selection with Q and E keys
             if (p.io.justPressed(.q)) {
-                p.block = if (p.block > 1) p.block - 1 else 255;
+                p.block = p.block -% 1;
             }
             if (p.io.justPressed(.e)) {
-                p.block = if (p.block < 255) p.block + 1 else 1;
+                p.block = p.block +% 1;
             }
         }
         if (p.io.justPressed(.escape)) p.io.mouse.unlock();
