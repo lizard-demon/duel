@@ -3,6 +3,7 @@ const sokol = @import("sokol");
 const sapp = sokol.app;
 
 pub const Key = enum(u16) {
+    // Letters
     a,
     b,
     c,
@@ -29,6 +30,7 @@ pub const Key = enum(u16) {
     x,
     y,
     z,
+    // Numbers
     _0,
     _1,
     _2,
@@ -39,6 +41,7 @@ pub const Key = enum(u16) {
     _7,
     _8,
     _9,
+    // Function keys
     f1,
     f2,
     f3,
@@ -64,6 +67,7 @@ pub const Key = enum(u16) {
     f23,
     f24,
     f25,
+    // Navigation
     up,
     down,
     left,
@@ -72,6 +76,7 @@ pub const Key = enum(u16) {
     page_down,
     home,
     end,
+    // Modifiers
     left_shift,
     right_shift,
     left_ctrl,
@@ -80,6 +85,7 @@ pub const Key = enum(u16) {
     right_alt,
     left_super,
     right_super,
+    // Special
     space,
     enter,
     tab,
@@ -93,6 +99,7 @@ pub const Key = enum(u16) {
     print_screen,
     pause,
     menu,
+    // Punctuation
     apostrophe,
     comma,
     minus,
@@ -104,6 +111,7 @@ pub const Key = enum(u16) {
     backslash,
     right_bracket,
     grave_accent,
+    // Keypad
     kp_0,
     kp_1,
     kp_2,
@@ -121,11 +129,13 @@ pub const Key = enum(u16) {
     kp_add,
     kp_enter,
     kp_equal,
+    // International
     world_1,
     world_2,
     none,
-    pub fn from(k: sapp.Keycode) Key {
-        return switch (k) {
+
+    pub fn from(kc: sapp.Keycode) Key {
+        return switch (kc) {
             .A => .a,
             .B => .b,
             .C => .c,
@@ -252,7 +262,14 @@ pub const Key = enum(u16) {
 };
 
 pub const Vec2 = struct { x: f32, y: f32 };
-pub const Touch = struct { id: usize, x: f32, y: f32, changed: bool, tool_type: sapp.AndroidTooltype };
+
+pub const Touch = struct {
+    id: usize,
+    x: f32,
+    y: f32,
+    changed: bool,
+    tool_type: sapp.AndroidTooltype,
+};
 
 pub const Mouse = struct {
     x: f32 = 0,
@@ -265,38 +282,46 @@ pub const Mouse = struct {
     right: bool = false,
     middle: bool = false,
     cursor: sapp.MouseCursor = .DEFAULT,
+
     pub fn lock(_: *Mouse) void {
         sapp.lockMouse(true);
     }
+
     pub fn unlock(_: *Mouse) void {
         sapp.lockMouse(false);
     }
+
     pub fn isLocked(_: *const Mouse) bool {
         return sapp.mouseLocked();
     }
-    pub fn toggle(s: *Mouse) void {
-        if (s.isLocked()) s.unlock() else s.lock();
+
+    pub fn toggle(self: *Mouse) void {
+        if (self.isLocked()) self.unlock() else self.lock();
     }
+
     pub fn show(_: *Mouse) void {
         sapp.showMouse(true);
     }
+
     pub fn hide(_: *Mouse) void {
         sapp.showMouse(false);
     }
+
     pub fn isShown(_: *const Mouse) bool {
         return sapp.mouseShown();
     }
-    pub fn setCursor(s: *Mouse, c: sapp.MouseCursor) void {
-        sapp.setMouseCursor(c);
-        s.cursor = c;
+
+    pub fn setCursor(self: *Mouse, cursor: sapp.MouseCursor) void {
+        sapp.setMouseCursor(cursor);
+        self.cursor = cursor;
     }
 };
 
 pub const IO = struct {
-    keys: [512]bool = std.mem.zeroes([512]bool),
-    keys_prev: [512]bool = std.mem.zeroes([512]bool),
+    keys: [512]bool = [_]bool{false} ** 512,
+    keys_prev: [512]bool = [_]bool{false} ** 512,
     mouse: Mouse = .{},
-    touches: [sapp.max_touchpoints]?Touch = std.mem.zeroes([sapp.max_touchpoints]?Touch),
+    touches: [sapp.max_touchpoints]?Touch = [_]?Touch{null} ** sapp.max_touchpoints,
     num_touches: usize = 0,
     char_code: u32 = 0,
     frame_count: u64 = 0,
@@ -304,104 +329,156 @@ pub const IO = struct {
     window_focused: bool = true,
     window_iconified: bool = false,
 
-    pub fn pressed(s: *const IO, k: Key) bool {
-        return s.keys[@intFromEnum(k)];
-    }
-    pub fn released(s: *const IO, k: Key) bool {
-        return !s.keys[@intFromEnum(k)];
-    }
-    pub fn justPressed(s: *const IO, k: Key) bool {
-        const i = @intFromEnum(k);
-        return s.keys[i] and !s.keys_prev[i];
-    }
-    pub fn justReleased(s: *const IO, k: Key) bool {
-        const i = @intFromEnum(k);
-        return !s.keys[i] and s.keys_prev[i];
-    }
-    pub fn axis(s: *const IO, n: Key, p: Key) f32 {
-        return @as(f32, if (s.pressed(p)) 1 else 0) - @as(f32, if (s.pressed(n)) 1 else 0);
-    }
-    pub fn vec2(s: *const IO, l: Key, r: Key, d: Key, u: Key) Vec2 {
-        return .{ .x = s.axis(l, r), .y = s.axis(d, u) };
-    }
-    pub fn shift(s: *const IO) bool {
-        return s.pressed(.left_shift) or s.pressed(.right_shift);
-    }
-    pub fn ctrl(s: *const IO) bool {
-        return s.pressed(.left_ctrl) or s.pressed(.right_ctrl);
-    }
-    pub fn alt(s: *const IO) bool {
-        return s.pressed(.left_alt) or s.pressed(.right_alt);
-    }
-    pub fn super(s: *const IO) bool {
-        return s.pressed(.left_super) or s.pressed(.right_super);
-    }
-    pub fn getTouch(s: *const IO, i: usize) ?Touch {
-        if (i >= sapp.max_touchpoints) return null;
-        return s.touches[i];
-    }
-    pub fn cleanInput(s: *IO) void {
-        @memcpy(&s.keys_prev, &s.keys);
-        s.mouse.dx = 0;
-        s.mouse.dy = 0;
-        s.mouse.scroll_x = 0;
-        s.mouse.scroll_y = 0;
-        s.char_code = 0;
-        s.window_resized = false;
+    // Key state queries
+    pub fn pressed(self: *const IO, k: Key) bool {
+        return self.keys[@intFromEnum(k)];
     }
 
-    pub fn update(s: *IO, ev: [*c]const sapp.Event) void {
+    pub fn released(self: *const IO, k: Key) bool {
+        return !self.keys[@intFromEnum(k)];
+    }
+
+    pub fn justPressed(self: *const IO, k: Key) bool {
+        const idx = @intFromEnum(k);
+        return self.keys[idx] and !self.keys_prev[idx];
+    }
+
+    pub fn justReleased(self: *const IO, k: Key) bool {
+        const idx = @intFromEnum(k);
+        return !self.keys[idx] and self.keys_prev[idx];
+    }
+
+    // Axis input
+    pub fn axis(self: *const IO, neg: Key, pos: Key) f32 {
+        return @as(f32, if (self.pressed(pos)) 1 else 0) -
+            @as(f32, if (self.pressed(neg)) 1 else 0);
+    }
+
+    pub fn vec2(self: *const IO, left: Key, right: Key, down: Key, up: Key) Vec2 {
+        return .{
+            .x = self.axis(left, right),
+            .y = self.axis(down, up),
+        };
+    }
+
+    // Modifier key helpers (derived from key state, single source of truth)
+    pub fn shift(self: *const IO) bool {
+        return self.pressed(.left_shift) or self.pressed(.right_shift);
+    }
+
+    pub fn ctrl(self: *const IO) bool {
+        return self.pressed(.left_ctrl) or self.pressed(.right_ctrl);
+    }
+
+    pub fn alt(self: *const IO) bool {
+        return self.pressed(.left_alt) or self.pressed(.right_alt);
+    }
+
+    pub fn super(self: *const IO) bool {
+        return self.pressed(.left_super) or self.pressed(.right_super);
+    }
+
+    // Touch input - simple slot-based access
+    pub fn getTouch(self: *const IO, idx: usize) ?Touch {
+        if (idx >= sapp.max_touchpoints) return null;
+        return self.touches[idx];
+    }
+
+    // Clear per-frame input state - call at end of frame after reading input
+    pub fn cleanInput(self: *IO) void {
+        // Copy key state for justPressed/justReleased detection
+        @memcpy(&self.keys_prev, &self.keys);
+
+        // Clear per-frame accumulated input
+        self.mouse.dx = 0;
+        self.mouse.dy = 0;
+        self.mouse.scroll_x = 0;
+        self.mouse.scroll_y = 0;
+        self.char_code = 0;
+
+        // Clear per-frame window state
+        self.window_resized = false;
+    }
+
+    pub fn update(self: *IO, ev: [*c]const sapp.Event) void {
         const e = ev.*;
-        s.frame_count = e.frame_count;
+        self.frame_count = e.frame_count;
+
         switch (e.type) {
             .KEY_DOWN => {
                 const k = Key.from(e.key_code);
-                if (k != .none) s.keys[@intFromEnum(k)] = true;
+                if (k != .none) self.keys[@intFromEnum(k)] = true;
             },
             .KEY_UP => {
                 const k = Key.from(e.key_code);
-                if (k != .none) s.keys[@intFromEnum(k)] = false;
+                if (k != .none) self.keys[@intFromEnum(k)] = false;
             },
-            .CHAR => s.char_code = e.char_code,
-            .MOUSE_DOWN => switch (e.mouse_button) {
-                .LEFT => s.mouse.left = true,
-                .RIGHT => s.mouse.right = true,
-                .MIDDLE => s.mouse.middle = true,
-                else => {},
+            .CHAR => {
+                self.char_code = e.char_code;
             },
-            .MOUSE_UP => switch (e.mouse_button) {
-                .LEFT => s.mouse.left = false,
-                .RIGHT => s.mouse.right = false,
-                .MIDDLE => s.mouse.middle = false,
-                else => {},
+            .MOUSE_DOWN => {
+                switch (e.mouse_button) {
+                    .LEFT => self.mouse.left = true,
+                    .RIGHT => self.mouse.right = true,
+                    .MIDDLE => self.mouse.middle = true,
+                    else => {},
+                }
+            },
+            .MOUSE_UP => {
+                switch (e.mouse_button) {
+                    .LEFT => self.mouse.left = false,
+                    .RIGHT => self.mouse.right = false,
+                    .MIDDLE => self.mouse.middle = false,
+                    else => {},
+                }
             },
             .MOUSE_MOVE => {
-                s.mouse.x = e.mouse_x;
-                s.mouse.y = e.mouse_y;
-                s.mouse.dx += e.mouse_dx;
-                s.mouse.dy += e.mouse_dy;
+                self.mouse.x = e.mouse_x;
+                self.mouse.y = e.mouse_y;
+                // Accumulate deltas across multiple events within the same frame
+                self.mouse.dx += e.mouse_dx;
+                self.mouse.dy += e.mouse_dy;
             },
             .MOUSE_SCROLL => {
-                s.mouse.scroll_x += e.scroll_x;
-                s.mouse.scroll_y += e.scroll_y;
+                // Accumulate scroll across multiple events within the same frame
+                self.mouse.scroll_x += e.scroll_x;
+                self.mouse.scroll_y += e.scroll_y;
             },
             .MOUSE_ENTER, .MOUSE_LEAVE => {},
             .TOUCHES_BEGAN, .TOUCHES_MOVED => {
-                s.num_touches = @intCast(@max(0, @min(e.num_touches, sapp.max_touchpoints)));
-                for (0..s.num_touches) |i| {
+                // Update active touches
+                self.num_touches = @intCast(@max(0, @min(e.num_touches, sapp.max_touchpoints)));
+                for (0..self.num_touches) |i| {
                     const t = e.touches[i];
-                    s.touches[i] = Touch{ .id = t.identifier, .x = t.pos_x, .y = t.pos_y, .changed = t.changed, .tool_type = t.android_tooltype };
+                    self.touches[i] = Touch{
+                        .id = t.identifier,
+                        .x = t.pos_x,
+                        .y = t.pos_y,
+                        .changed = t.changed,
+                        .tool_type = t.android_tooltype,
+                    };
                 }
             },
             .TOUCHES_ENDED, .TOUCHES_CANCELLED => {
-                s.touches = [_]?Touch{null} ** sapp.max_touchpoints;
-                s.num_touches = 0;
+                // Clear all touches on end/cancel
+                self.touches = [_]?Touch{null} ** sapp.max_touchpoints;
+                self.num_touches = 0;
             },
-            .RESIZED => s.window_resized = true,
-            .ICONIFIED => s.window_iconified = true,
-            .RESTORED => s.window_iconified = false,
-            .FOCUSED => s.window_focused = true,
-            .UNFOCUSED => s.window_focused = false,
+            .RESIZED => {
+                self.window_resized = true;
+            },
+            .ICONIFIED => {
+                self.window_iconified = true;
+            },
+            .RESTORED => {
+                self.window_iconified = false;
+            },
+            .FOCUSED => {
+                self.window_focused = true;
+            },
+            .UNFOCUSED => {
+                self.window_focused = false;
+            },
             .SUSPENDED, .RESUMED, .QUIT_REQUESTED, .CLIPBOARD_PASTED, .FILES_DROPPED => {},
             else => {},
         }
