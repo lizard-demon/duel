@@ -23,11 +23,16 @@ pub const AABB = struct {
         const tx = axis(b.min.data[0], b.max.data[0], o.min.data[0], o.max.data[0], inv.data[0]);
         const ty = axis(b.min.data[1], b.max.data[1], o.min.data[1], o.max.data[1], inv.data[1]);
         const tz = axis(b.min.data[2], b.max.data[2], o.min.data[2], o.max.data[2], inv.data[2]);
-        const e = @max(@max(tx.enter, ty.enter), tz.enter);
-        const x = @min(@min(tx.exit, ty.exit), tz.exit);
-        if (e > x or e > 1 or x < 0 or e < 0) return null;
-        const n = if (tx.enter > ty.enter and tx.enter > tz.enter) Vec3.new(if (v.data[0] > 0) -1 else 1, 0, 0) else if (ty.enter > tz.enter) Vec3.new(0, if (v.data[1] > 0) -1 else 1, 0) else Vec3.new(0, 0, if (v.data[2] > 0) -1 else 1);
-        return .{ .t = e, .n = n };
+        const enter = @max(@max(tx.enter, ty.enter), tz.enter);
+        const exit = @min(@min(tx.exit, ty.exit), tz.exit);
+        if (enter > exit or enter > 1 or exit < 0 or enter < 0) return null;
+        const n = if (tx.enter > ty.enter and tx.enter > tz.enter)
+            Vec3.new(if (v.data[0] > 0) -1 else 1, 0, 0)
+        else if (ty.enter > tz.enter)
+            Vec3.new(0, if (v.data[1] > 0) -1 else 1, 0)
+        else
+            Vec3.new(0, 0, if (v.data[2] > 0) -1 else 1);
+        return .{ .t = enter, .n = n };
     }
     fn axis(min1: f32, max1: f32, min2: f32, max2: f32, inv: f32) struct { enter: f32, exit: f32 } {
         const t1 = (min2 - max1) * inv;
@@ -75,9 +80,9 @@ pub const World = struct {
     pub fn init() World {
         var w = World{ .blocks = std.mem.zeroes([64][64][64]Block) };
         for (0..64) |x| for (0..64) |y| for (0..64) |z| {
-            const wall = x == 0 or x == 63 or z == 0 or z == 63;
-            const floor = y == 0;
-            w.blocks[x][y][z] = if (wall and y < 63) 110 else if (floor) 100 else 0;
+            const is_wall = x == 0 or x == 63 or z == 0 or z == 63;
+            const is_floor = y == 0;
+            w.blocks[x][y][z] = if (is_wall and y < 63) 110 else if (is_floor) 100 else 0;
         };
         return w;
     }
@@ -96,9 +101,13 @@ pub const World = struct {
 
     pub fn raycast(w: *const World, pos: Vec3, dir: Vec3, dist: f32) ?Vec3 {
         var p = pos;
-        for (0..@intFromFloat(dist * 10)) |_| {
-            p = p.add(dir.scale(0.1));
-            const x, const y, const z = .{ @as(i32, @intFromFloat(@floor(p.data[0]))), @as(i32, @intFromFloat(@floor(p.data[1]))), @as(i32, @intFromFloat(@floor(p.data[2]))) };
+        const step_size = 0.1;
+        const steps = @as(u32, @intFromFloat(dist / step_size));
+        for (0..steps) |_| {
+            p = p.add(dir.scale(step_size));
+            const x = @as(i32, @intFromFloat(@floor(p.data[0])));
+            const y = @as(i32, @intFromFloat(@floor(p.data[1])));
+            const z = @as(i32, @intFromFloat(@floor(p.data[2])));
             if (w.get(x, y, z) != 0) return p;
         }
         return null;
@@ -128,12 +137,19 @@ pub const World = struct {
             var c: f32 = 1;
             var n = Vec3.zero();
             var f = false;
-            var x = @as(i32, @intFromFloat(@floor(rg.min.data[0])));
-            while (x <= @as(i32, @intFromFloat(@floor(rg.max.data[0])))) : (x += 1) {
-                var y = @as(i32, @intFromFloat(@floor(rg.min.data[1])));
-                while (y <= @as(i32, @intFromFloat(@floor(rg.max.data[1])))) : (y += 1) {
-                    var z = @as(i32, @intFromFloat(@floor(rg.min.data[2])));
-                    while (z <= @as(i32, @intFromFloat(@floor(rg.max.data[2])))) : (z += 1) {
+            const min_x = @as(i32, @intFromFloat(@floor(rg.min.data[0])));
+            const max_x = @as(i32, @intFromFloat(@floor(rg.max.data[0])));
+            const min_y = @as(i32, @intFromFloat(@floor(rg.min.data[1])));
+            const max_y = @as(i32, @intFromFloat(@floor(rg.max.data[1])));
+            const min_z = @as(i32, @intFromFloat(@floor(rg.min.data[2])));
+            const max_z = @as(i32, @intFromFloat(@floor(rg.max.data[2])));
+
+            var x = min_x;
+            while (x <= max_x) : (x += 1) {
+                var y = min_y;
+                while (y <= max_y) : (y += 1) {
+                    var z = min_z;
+                    while (z <= max_z) : (z += 1) {
                         if (w.get(x, y, z) == 0) continue;
                         const b = Vec3.new(@as(f32, @floatFromInt(x)), @as(f32, @floatFromInt(y)), @as(f32, @floatFromInt(z)));
                         if (pl.sweep(v, .{ .min = b, .max = b.add(Vec3.new(1, 1, 1)) })) |col| if (col.t < c) {
