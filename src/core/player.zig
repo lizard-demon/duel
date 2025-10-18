@@ -142,7 +142,7 @@ pub const Player = struct {
     }
 
     pub fn init() Player {
-        return .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .weapon = .{}, .io = .{}, .block = 1, .cool = 0 }; // start with color 1
+        return .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .weapon = .{}, .io = .{}, .block = 0b11100011, .cool = 0 }; // start with red
     }
 
     pub fn tick(p: *Player, w: *World, dt: f32) bool {

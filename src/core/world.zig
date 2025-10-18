@@ -39,40 +39,25 @@ pub const AABB = struct {
 pub const World = struct {
     blocks: [64][64][64]Block,
 
-    // Generate 256 colors evenly spread across RGB space
     pub fn color(block: Block) [3]f32 {
-        if (block == 0) return .{ 0, 0, 0 }; // air is black/transparent
+        if (block == 0) return .{ 0, 0, 0 }; // air
 
-        // Map block value (1-255) to RGB cube
-        // Use 6x6x7 = 252 colors + 4 extra for 256 total
-        const idx = block - 1; // 0-254 range
+        // Direct RGB mapping: treat block as 8-bit RGB332 (3 red, 3 green, 2 blue bits)
+        const r = (block >> 5) & 0x7; // 3 bits for red
+        const g = (block >> 2) & 0x7; // 3 bits for green
+        const b = block & 0x3; // 2 bits for blue
 
-        if (idx < 252) {
-            // 6x6x7 RGB cube
-            const r = idx % 6;
-            const g = (idx / 6) % 6;
-            const b = idx / 36;
-            return .{
-                @as(f32, @floatFromInt(r)) / 5.0,
-                @as(f32, @floatFromInt(g)) / 5.0,
-                @as(f32, @floatFromInt(b)) / 6.0,
-            };
-        } else {
-            // Extra colors for remaining slots
-            const extra = idx - 252;
-            return switch (extra) {
-                0 => .{ 1.0, 1.0, 1.0 }, // white
-                1 => .{ 0.5, 0.5, 0.5 }, // gray
-                2 => .{ 1.0, 0.5, 0.0 }, // orange
-                else => .{ 1.0, 0.0, 1.0 }, // magenta
-            };
-        }
+        return .{
+            @as(f32, @floatFromInt(r)) / 7.0,
+            @as(f32, @floatFromInt(g)) / 7.0,
+            @as(f32, @floatFromInt(b)) / 3.0,
+        };
     }
     pub fn init() World {
         var w = World{ .blocks = std.mem.zeroes([64][64][64]Block) };
         for (0..64) |x| for (0..64) |y| for (0..64) |z| {
             const e = x == 0 or x == 63 or z == 0 or z == 63;
-            w.blocks[x][y][z] = if (e) if (y < 63) 100 else 50 else if (y == 0) 50 else 0; // stone=100, grass=50, air=0
+            w.blocks[x][y][z] = if (e) if (y < 63) 0b11100000 else 0b00011100 else if (y == 0) 0b00011100 else 0; // gray walls, green floor
         };
         return w;
     }
