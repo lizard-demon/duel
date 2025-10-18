@@ -163,24 +163,27 @@ pub const World = struct {
         var vi: usize = 0;
         var ii: usize = 0;
         const shades = [_]f32{ 0.8, 0.8, 1.0, 0.8, 0.8, 0.8 };
-        var mask: [64 * 64]Block = undefined;
+
+        // Use a struct to store face info instead of bit packing
+        const FaceInfo = struct { block: Block, is_back: bool };
+        var mask: [64 * 64]FaceInfo = undefined;
 
         // Greedy meshing - sweep each axis
         inline for (0..3) |axis| {
             const u = (axis + 1) % 3;
             const v = (axis + 2) % 3;
 
-            var d: i32 = -1;
+            var d: i32 = 0;
             while (d < 64) : (d += 1) {
-                @memset(&mask, 0);
+                @memset(&mask, .{ .block = 0, .is_back = false });
 
                 // Build face mask for this slice
                 for (0..64) |j| {
                     for (0..64) |i| {
                         var pos1 = [3]i32{ 0, 0, 0 };
                         var pos2 = [3]i32{ 0, 0, 0 };
-                        pos1[axis] = d;
-                        pos2[axis] = d + 1;
+                        pos1[axis] = d - 1;
+                        pos2[axis] = d;
                         pos1[u] = @intCast(i);
                         pos1[v] = @intCast(j);
                         pos2[u] = @intCast(i);
@@ -190,7 +193,11 @@ pub const World = struct {
                         const b2 = w.get(pos2[0], pos2[1], pos2[2]);
 
                         // Face exists if blocks differ and one is solid
-                        mask[j * 64 + i] = if (b1 != 0 and b2 == 0) b1 else if (b1 == 0 and b2 != 0) b2 | 0x80 else 0;
+                        if (b1 != 0 and b2 == 0) {
+                            mask[j * 64 + i] = .{ .block = b1, .is_back = false };
+                        } else if (b1 == 0 and b2 != 0) {
+                            mask[j * 64 + i] = .{ .block = b2, .is_back = true };
+                        }
                     }
                 }
 
@@ -199,25 +206,27 @@ pub const World = struct {
                 while (j < 64) : (j += 1) {
                     var i: usize = 0;
                     while (i < 64) {
-                        const face_block = mask[j * 64 + i];
-                        if (face_block == 0) {
+                        const face_info = mask[j * 64 + i];
+                        if (face_info.block == 0) {
                             i += 1;
                             continue;
                         }
 
-                        const is_back_face = (face_block & 0x80) != 0;
-                        const block_type = face_block & 0x7F;
-
-                        // Find width - extend right while same block type
+                        // Find width - extend right while same face
                         var width: usize = 1;
-                        while (i + width < 64 and mask[j * 64 + i + width] == face_block) width += 1;
+                        while (i + width < 64) {
+                            const next_face = mask[j * 64 + i + width];
+                            if (next_face.block != face_info.block or next_face.is_back != face_info.is_back) break;
+                            width += 1;
+                        }
 
                         // Find height - extend up while entire row matches
                         var height: usize = 1;
                         while (j + height < 64) {
                             var row_matches = true;
                             for (0..width) |k| {
-                                if (mask[(j + height) * 64 + i + k] != face_block) {
+                                const check_face = mask[(j + height) * 64 + i + k];
+                                if (check_face.block != face_info.block or check_face.is_back != face_info.is_back) {
                                     row_matches = false;
                                     break;
                                 }
@@ -229,22 +238,23 @@ pub const World = struct {
                         // Clear processed area
                         for (0..height) |h| {
                             for (0..width) |w_idx| {
-                                mask[(j + h) * 64 + i + w_idx] = 0;
+                                mask[(j + h) * 64 + i + w_idx] = .{ .block = 0, .is_back = false };
                             }
                         }
 
                         // Generate quad vertices
                         if (vi + 4 > verts.len or ii + 6 > indices.len) return .{ .verts = vi, .indices = ii };
 
-                        const col = colors(block_type);
-                        const shade_offset: usize = if (is_back_face) 0 else 1;
+                        const col = colors(face_info.block);
+                        const shade_offset: usize = if (face_info.is_back) 0 else 1;
                         const shade_idx = axis * 2 + shade_offset;
                         const shade = shades[shade_idx];
                         const fcol = [4]f32{ col[0] * shade, col[1] * shade, col[2] * shade, 1 };
 
+                        // Calculate face position correctly
+                        const face_pos: f32 = @floatFromInt(d);
+
                         var quad = [4][3]f32{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } };
-                        const face_offset: f32 = if (is_back_face) 0.0 else 1.0;
-                        const face_pos: f32 = @as(f32, @floatFromInt(d)) + face_offset;
 
                         quad[0][axis] = face_pos;
                         quad[0][u] = @floatFromInt(i);
@@ -265,7 +275,7 @@ pub const World = struct {
                         const base = @as(u16, @intCast(vi));
 
                         // Wind vertices correctly for face direction
-                        if (is_back_face) {
+                        if (face_info.is_back) {
                             verts[vi] = .{ .pos = quad[0], .col = fcol };
                             verts[vi + 1] = .{ .pos = quad[3], .col = fcol };
                             verts[vi + 2] = .{ .pos = quad[2], .col = fcol };
