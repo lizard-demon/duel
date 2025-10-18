@@ -18,10 +18,15 @@ pub fn build(b: *Build) !void {
     dep_sokol.artifact("sokol_clib").addIncludePath(dep_cimgui.path(cimgui_conf.include_dir));
 
     const shader = try @import("shdc").createSourceFile(b, .{ .shdc_dep = shdc, .input = "src/shaders/cube.glsl", .output = "src/shaders/cube.glsl.zig", .slang = .{ .glsl410 = true, .glsl300es = true, .metal_macos = true, .wgsl = true } });
+
+    const mod_options = b.addOptions();
+    mod_options.addOption(bool, "docking", opt_docking);
+
     const mod = b.createModule(.{ .root_source_file = b.path("src/main.zig"), .target = target, .optimize = optimize, .imports = &.{
         .{ .name = "sokol", .module = dep_sokol.module("sokol") },
         .{ .name = cimgui_conf.module_name, .module = dep_cimgui.module(cimgui_conf.module_name) },
     } });
+    mod.addOptions("build_options", mod_options);
     const opts = Opts{ .mod = mod, .dep_sokol = dep_sokol, .dep_cimgui = dep_cimgui, .cimgui_clib_name = cimgui_conf.clib_name, .shader = shader };
     if (target.result.cpu.arch.isWasm()) try buildWeb(b, opts) else try buildNative(b, opts);
 }
