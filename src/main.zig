@@ -1,7 +1,6 @@
 const std = @import("std");
 const sokol = @import("sokol");
 const sapp = sokol.app;
-const sg = sokol.gfx;
 const use_docking = @import("build_options").docking;
 const ig = if (use_docking) @import("cimgui_docking") else @import("cimgui");
 const simgui = sokol.imgui;
@@ -25,7 +24,6 @@ const Player = struct {
     on_ground: bool,
     crouching: bool,
     io: input.IO,
-    sniper_texture: sg.Image,
 
     const GRAVITY: f32 = 20;
     const JUMP_FORCE: f32 = 8;
@@ -44,43 +42,7 @@ const Player = struct {
             .on_ground = false,
             .crouching = false,
             .io = .{},
-            .sniper_texture = .{ .id = 0 },
         };
-    }
-
-    fn loadSniperTexture(p: *Player) void {
-        const sniper_data = @embedFile("lib/sniper.png");
-        var img_desc = sg.ImageDesc{
-            .width = 0,
-            .height = 0,
-            .pixel_format = .RGBA8,
-        };
-
-        // Create a simple placeholder texture for now - in a real implementation you'd use stb_image or similar
-        const width = 128;
-        const height = 128;
-        var pixels: [width * height * 4]u8 = undefined;
-
-        // Create a simple pattern as placeholder
-        for (0..height) |y| {
-            for (0..width) |x| {
-                const idx = (y * width + x) * 4;
-                pixels[idx] = @intCast((x * 255) / width); // R
-                pixels[idx + 1] = @intCast((y * 255) / height); // G
-                pixels[idx + 2] = 128; // B
-                pixels[idx + 3] = 255; // A
-            }
-        }
-
-        img_desc.width = width;
-        img_desc.height = height;
-        img_desc.data.subimage[0][0] = .{
-            .ptr = &pixels,
-            .size = pixels.len,
-        };
-
-        p.sniper_texture = sg.makeImage(img_desc);
-        _ = sniper_data; // Suppress unused warning for now
     }
 
     fn update(p: *Player, w: *const W, dt: f32) void {
@@ -253,7 +215,7 @@ const Game = struct {
 
         s.player.drawHUD();
 
-        const proj = alg.perspective(60, sapp.widthf() / sapp.heightf(), 0.1, 1000);
+        const proj = alg.perspective(90, sapp.widthf() / sapp.heightf(), 0.1, 1000);
         const view = s.player.getViewMatrix();
         const mvp = M.mul(proj, view);
 
