@@ -129,13 +129,20 @@ pub const Player = struct {
             _ = ig.igText("Ground: %s", if (p.ground) "Yes".ptr else "No".ptr);
             _ = ig.igText("Crouch: %s", if (p.crouch) "Yes".ptr else "No".ptr);
             _ = ig.igText("Charge: %.2f", p.weapon.charge);
-            _ = ig.igText("Block: %d", @intFromEnum(p.block));
+            _ = ig.igText("Block: %d", p.block);
+            const block_color = world.World.color(p.block);
+            _ = ig.igText("Color: %.2f, %.2f, %.2f", block_color[0], block_color[1], block_color[2]);
+
+            // Show color preview
+            _ = ig.igColorButton("##color_preview", .{ .x = block_color[0], .y = block_color[1], .z = block_color[2], .w = 1.0 }, ig.ImGuiColorEditFlags_NoTooltip);
+            ig.igSameLine();
+            _ = ig.igText("Q/E to change");
         }
         ig.igEnd();
     }
 
     pub fn init() Player {
-        return .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .weapon = .{}, .io = .{}, .block = .stone, .cool = 0 };
+        return .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .weapon = .{}, .io = .{}, .block = 1, .cool = 0 }; // start with color 1
     }
 
     pub fn tick(p: *Player, w: *World, dt: f32) bool {
@@ -179,7 +186,7 @@ pub const Player = struct {
                 const look = Vec3.new(@sin(p.yaw) * @cos(p.pitch), -@sin(p.pitch), -@cos(p.yaw) * @cos(p.pitch));
                 if (w.raycast(p.pos, look, cfg.reach)) |hit| {
                     const x, const y, const z = .{ @as(i32, @intFromFloat(@floor(hit.data[0]))), @as(i32, @intFromFloat(@floor(hit.data[1]))), @as(i32, @intFromFloat(@floor(hit.data[2]))) };
-                    if (p.io.mouse.left and w.set(x, y, z, .air)) {
+                    if (p.io.mouse.left and w.set(x, y, z, 0)) { // set to air (0)
                         world_changed = true;
                         p.cool = cfg.block_cool;
                     } else if (p.io.mouse.right and p.weapon.charge == 0) {
@@ -193,9 +200,13 @@ pub const Player = struct {
                 }
             }
 
-            if (p.io.justPressed(._1)) p.block = .grass;
-            if (p.io.justPressed(._2)) p.block = .dirt;
-            if (p.io.justPressed(._3)) p.block = .stone;
+            // Color selection with Q and E keys
+            if (p.io.justPressed(.q)) {
+                p.block = if (p.block > 1) p.block - 1 else 255; // cycle down, wrap to 255
+            }
+            if (p.io.justPressed(.e)) {
+                p.block = if (p.block < 255) p.block + 1 else 1; // cycle up, wrap to 1 (skip air)
+            }
         }
         if (p.io.justPressed(.escape)) p.io.mouse.unlock();
         if (p.io.mouse.left and !p.io.mouse.locked()) p.io.mouse.lock();

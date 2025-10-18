@@ -3,7 +3,7 @@ const math = @import("../lib/math.zig");
 const gfx = @import("render.zig");
 const Vec3 = math.Vec3;
 
-pub const Block = enum(u8) { air, grass, dirt, stone };
+pub const Block = u8;
 
 pub const AABB = struct {
     min: Vec3,
@@ -39,30 +39,49 @@ pub const AABB = struct {
 pub const World = struct {
     blocks: [64][64][64]Block,
 
-    const COLORS = [_][3]f32{
-        .{ 0, 0, 0 }, // air
-        .{ 0.3, 0.7, 0.3 }, // grass
-        .{ 0.5, 0.35, 0.2 }, // dirt
-        .{ 0.5, 0.5, 0.5 }, // stone
-    };
-
+    // Generate 256 colors evenly spread across RGB space
     pub fn color(block: Block) [3]f32 {
-        return COLORS[@intFromEnum(block)];
+        if (block == 0) return .{ 0, 0, 0 }; // air is black/transparent
+
+        // Map block value (1-255) to RGB cube
+        // Use 6x6x7 = 252 colors + 4 extra for 256 total
+        const idx = block - 1; // 0-254 range
+
+        if (idx < 252) {
+            // 6x6x7 RGB cube
+            const r = idx % 6;
+            const g = (idx / 6) % 6;
+            const b = idx / 36;
+            return .{
+                @as(f32, @floatFromInt(r)) / 5.0,
+                @as(f32, @floatFromInt(g)) / 5.0,
+                @as(f32, @floatFromInt(b)) / 6.0,
+            };
+        } else {
+            // Extra colors for remaining slots
+            const extra = idx - 252;
+            return switch (extra) {
+                0 => .{ 1.0, 1.0, 1.0 }, // white
+                1 => .{ 0.5, 0.5, 0.5 }, // gray
+                2 => .{ 1.0, 0.5, 0.0 }, // orange
+                else => .{ 1.0, 0.0, 1.0 }, // magenta
+            };
+        }
     }
     pub fn init() World {
         var w = World{ .blocks = std.mem.zeroes([64][64][64]Block) };
         for (0..64) |x| for (0..64) |y| for (0..64) |z| {
             const e = x == 0 or x == 63 or z == 0 or z == 63;
-            w.blocks[x][y][z] = if (e) if (y < 63) .stone else .grass else if (y == 0) .grass else .air;
+            w.blocks[x][y][z] = if (e) if (y < 63) 100 else 50 else if (y == 0) 50 else 0; // stone=100, grass=50, air=0
         };
         return w;
     }
     pub fn get(w: *const World, x: i32, y: i32, z: i32) Block {
-        if (x < 0 or x >= 64 or y < 0 or y >= 64 or z < 0 or z >= 64) return .air;
+        if (x < 0 or x >= 64 or y < 0 or y >= 64 or z < 0 or z >= 64) return 0; // air
         return w.blocks[@intCast(x)][@intCast(y)][@intCast(z)];
     }
     pub fn solid(w: *const World, x: i32, y: i32, z: i32) bool {
-        return w.get(x, y, z) != .air;
+        return w.get(x, y, z) != 0; // air is 0
     }
 
     pub fn set(w: *World, x: i32, y: i32, z: i32, block: Block) bool {
@@ -158,13 +177,13 @@ pub const World = struct {
                             pos[ax.u] = @intCast(u);
                             pos[ax.v] = @intCast(v);
                             const blk = w.get(pos[0], pos[1], pos[2]);
-                            if (blk == .air) {
+                            if (blk == 0) { // air
                                 mask[n] = false;
                                 n += 1;
                                 continue;
                             }
                             pos[ax.d] += stp;
-                            mask[n] = w.get(pos[0], pos[1], pos[2]) == .air;
+                            mask[n] = w.get(pos[0], pos[1], pos[2]) == 0; // air
                             n += 1;
                         }
                     }
