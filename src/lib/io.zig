@@ -1,3 +1,4 @@
+// Just a wrapper around the sokol API
 const std = @import("std");
 const sokol = @import("sokol");
 const sapp = sokol.app;

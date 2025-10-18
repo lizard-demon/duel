@@ -1,3 +1,4 @@
+// All the math we need
 const std = @import("std");
 
 pub const Vec3 = struct {

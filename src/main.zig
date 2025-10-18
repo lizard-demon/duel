@@ -8,8 +8,7 @@ const simgui = sokol.imgui;
 const math = @import("lib/math.zig");
 const io = @import("lib/io.zig");
 const world = @import("world/world.zig");
-const mesh = @import("world/mesh.zig");
-const gfx = @import("world/draw.zig");
+const gfx = @import("world/render.zig");
 const shader = @import("shaders/cube.glsl.zig");
 
 const Vec3 = math.Vec3;
@@ -171,8 +170,8 @@ var indices: [98304]u16 = undefined;
 var buf: [1024]u8 = undefined;
 
 const Game = struct {
-    pipe: gfx.Draw,
-    vox: gfx.Draw,
+    pipe: gfx.Render,
+    vox: gfx.Render,
     player: Player,
     world: World,
     alloc: std.heap.FixedBufferAllocator,
@@ -186,10 +185,10 @@ const Game = struct {
         const gi = [_]u16{ 0, 1, 2, 0, 2, 3 };
         const sky = [4]f32{ 0.5, 0.7, 0.9, 1 };
 
-        var g = Game{ .pipe = gfx.Draw.init(&gv, &gi, sky), .player = Player.init(), .world = World.init(), .vox = undefined, .alloc = std.heap.FixedBufferAllocator.init(&buf) };
+        var g = Game{ .pipe = gfx.Render.init(&gv, &gi, sky), .player = Player.init(), .world = World.init(), .vox = undefined, .alloc = std.heap.FixedBufferAllocator.init(&buf) };
 
-        const r = mesh.mesh(&g.world, &verts, &indices, World.color);
-        g.vox = gfx.Draw.init(verts[0..r.verts], indices[0..r.indices], sky);
+        const r = g.world.mesh(&verts, &indices, World.color);
+        g.vox = gfx.Render.init(verts[0..r.verts], indices[0..r.indices], sky);
         const sh = shader.cubeShaderDesc(sokol.gfx.queryBackend());
         g.pipe.shader(sh);
         g.vox.shader(sh);
