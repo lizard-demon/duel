@@ -230,6 +230,8 @@ pub fn main() void {
         .sample_count = 4,
         .icon = .{ .sokol_default = true },
         .window_title = "Voxels",
+        .html5_canvas_selector = "canvas",
+        .html5_ask_leave_site = false,
         .logger = .{ .func = sokol.log.func },
     });
 }
