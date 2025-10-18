@@ -44,6 +44,23 @@ const Weapon = struct {
         w.cooldown = COOLDOWN_TIME;
         return power;
     }
+
+    fn crosshair(_: *const Weapon, size: f32, r: f32, g: f32, b: f32, alpha: f32) void {
+        const screen_w = sapp.widthf();
+        const screen_h = sapp.heightf();
+        const cx = screen_w * 0.5;
+        const cy = screen_h * 0.5;
+
+        ig.igSetNextWindowPos(.{ .x = 0, .y = 0 }, ig.ImGuiCond_Always);
+        ig.igSetNextWindowSize(.{ .x = screen_w, .y = screen_h }, ig.ImGuiCond_Always);
+        if (ig.igBegin("Crosshair", null, ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar | ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoInputs)) {
+            const draw_list = ig.igGetWindowDrawList();
+            const col = ig.igColorConvertFloat4ToU32(.{ .x = r, .y = g, .z = b, .w = alpha });
+            ig.ImDrawList_AddLine(draw_list, .{ .x = cx - size, .y = cy }, .{ .x = cx + size, .y = cy }, col);
+            ig.ImDrawList_AddLine(draw_list, .{ .x = cx, .y = cy - size }, .{ .x = cx, .y = cy + size }, col);
+        }
+        ig.igEnd();
+    }
 };
 
 const Player = struct {
@@ -194,26 +211,9 @@ const Player = struct {
         }
         ig.igEnd();
 
-        p.drawCrosshair();
-    }
-
-    fn drawCrosshair(p: *Player) void {
-        const w = sapp.widthf();
-        const h = sapp.heightf();
-        const cx = w * 0.5;
-        const cy = h * 0.5;
         const size = 8.0 + p.weapon.charge * 12.0;
         const alpha = 0.7 + p.weapon.charge * 0.3;
-
-        ig.igSetNextWindowPos(.{ .x = 0, .y = 0 }, ig.ImGuiCond_Always);
-        ig.igSetNextWindowSize(.{ .x = w, .y = h }, ig.ImGuiCond_Always);
-        if (ig.igBegin("Crosshair", null, ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar | ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoInputs)) {
-            const draw_list = ig.igGetWindowDrawList();
-            const col = ig.igColorConvertFloat4ToU32(.{ .x = 1, .y = 1, .z = 1, .w = alpha });
-            ig.ImDrawList_AddLine(draw_list, .{ .x = cx - size, .y = cy }, .{ .x = cx + size, .y = cy }, col);
-            ig.ImDrawList_AddLine(draw_list, .{ .x = cx, .y = cy - size }, .{ .x = cx, .y = cy + size }, col);
-        }
-        ig.igEnd();
+        p.weapon.crosshair(size, 1.0, 1.0, 1.0, alpha);
     }
 };
 
