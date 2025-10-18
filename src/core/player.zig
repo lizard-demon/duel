@@ -121,13 +121,47 @@ pub const Player = struct {
 
         const wish = p.io.shift();
         if (p.crouch and !wish) {
+            // Calculate the height difference between crouching and standing
             const diff: f32 = (cfg.size.stand - cfg.size.crouch) / 2.0;
-            const pos = Vec3.new(p.pos.data[0], p.pos.data[1] + diff, p.pos.data[2]);
-            const box = world.AABB{ .min = Vec3.new(-cfg.size.width, -cfg.size.stand / 2.0, -cfg.size.width), .max = Vec3.new(cfg.size.width, cfg.size.stand / 2.0, cfg.size.width) };
-            const r = w.sweep(pos, box, Vec3.zero(), 1);
-            if (!r.hit) p.pos.data[1] += diff;
-            p.crouch = r.hit;
-        } else p.crouch = wish;
+
+            // Calculate where the player would be positioned when standing
+            const test_pos = Vec3.new(p.pos.data[0], p.pos.data[1] + diff, p.pos.data[2]);
+
+            // Create the standing hitbox at the test position
+            const standing_box = world.AABB{ .min = Vec3.new(-cfg.size.width, -cfg.size.stand / 2.0, -cfg.size.width), .max = Vec3.new(cfg.size.width, cfg.size.stand / 2.0, cfg.size.width) };
+
+            // Check for static collision by testing the bounding box against world blocks
+            const player_aabb = standing_box.at(test_pos);
+            const min_x = @as(i32, @intFromFloat(@floor(player_aabb.min.data[0])));
+            const max_x = @as(i32, @intFromFloat(@floor(player_aabb.max.data[0])));
+            const min_y = @as(i32, @intFromFloat(@floor(player_aabb.min.data[1])));
+            const max_y = @as(i32, @intFromFloat(@floor(player_aabb.max.data[1])));
+            const min_z = @as(i32, @intFromFloat(@floor(player_aabb.min.data[2])));
+            const max_z = @as(i32, @intFromFloat(@floor(player_aabb.max.data[2])));
+
+            var collision = false;
+            var x = min_x;
+            while (x <= max_x and !collision) : (x += 1) {
+                var y = min_y;
+                while (y <= max_y and !collision) : (y += 1) {
+                    var z = min_z;
+                    while (z <= max_z and !collision) : (z += 1) {
+                        if (w.get(x, y, z) != 0) {
+                            collision = true;
+                        }
+                    }
+                }
+            }
+
+            // Only uncrouch if there's no collision
+            if (!collision) {
+                p.pos.data[1] += diff;
+                p.crouch = false;
+            }
+            // If collision detected, remain crouched
+        } else {
+            p.crouch = wish;
+        }
 
         if (p.io.pressed(.space) and p.ground) {
             p.vel.data[1] = cfg.jump.power;
