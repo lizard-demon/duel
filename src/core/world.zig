@@ -163,56 +163,128 @@ pub const World = struct {
         var vi: usize = 0;
         var ii: usize = 0;
         const shades = [_]f32{ 0.8, 0.8, 1.0, 0.8, 0.8, 0.8 };
+        var mask: [64 * 64]Block = undefined;
 
-        // Simple face-by-face meshing - reliable and flicker-free
-        for (0..64) |x| {
-            for (0..64) |y| {
-                for (0..64) |z| {
-                    const blk = w.get(@intCast(x), @intCast(y), @intCast(z));
-                    if (blk == 0) continue;
+        // Greedy meshing - sweep each axis
+        inline for (0..3) |axis| {
+            const u = (axis + 1) % 3;
+            const v = (axis + 2) % 3;
 
-                    const fx = @as(f32, @floatFromInt(x));
-                    const fy = @as(f32, @floatFromInt(y));
-                    const fz = @as(f32, @floatFromInt(z));
+            var d: i32 = -1;
+            while (d < 64) : (d += 1) {
+                @memset(&mask, 0);
 
-                    const col = colors(blk);
+                // Build face mask for this slice
+                for (0..64) |j| {
+                    for (0..64) |i| {
+                        var pos1 = [3]i32{ 0, 0, 0 };
+                        var pos2 = [3]i32{ 0, 0, 0 };
+                        pos1[axis] = d;
+                        pos2[axis] = d + 1;
+                        pos1[u] = @intCast(i);
+                        pos1[v] = @intCast(j);
+                        pos2[u] = @intCast(i);
+                        pos2[v] = @intCast(j);
 
-                    // Check each of the 6 faces
-                    const faces = [_]struct { check_pos: [3]i32, verts: [4][3]f32, shade_idx: usize }{
-                        // -X face (left)
-                        .{ .check_pos = .{ @as(i32, @intCast(x)) - 1, @as(i32, @intCast(y)), @as(i32, @intCast(z)) }, .verts = .{ .{ fx, fy, fz }, .{ fx, fy + 1, fz }, .{ fx, fy + 1, fz + 1 }, .{ fx, fy, fz + 1 } }, .shade_idx = 0 },
-                        // +X face (right)
-                        .{ .check_pos = .{ @as(i32, @intCast(x)) + 1, @as(i32, @intCast(y)), @as(i32, @intCast(z)) }, .verts = .{ .{ fx + 1, fy, fz + 1 }, .{ fx + 1, fy + 1, fz + 1 }, .{ fx + 1, fy + 1, fz }, .{ fx + 1, fy, fz } }, .shade_idx = 1 },
-                        // -Y face (bottom)
-                        .{ .check_pos = .{ @as(i32, @intCast(x)), @as(i32, @intCast(y)) - 1, @as(i32, @intCast(z)) }, .verts = .{ .{ fx, fy, fz }, .{ fx, fy, fz + 1 }, .{ fx + 1, fy, fz + 1 }, .{ fx + 1, fy, fz } }, .shade_idx = 2 },
-                        // +Y face (top)
-                        .{ .check_pos = .{ @as(i32, @intCast(x)), @as(i32, @intCast(y)) + 1, @as(i32, @intCast(z)) }, .verts = .{ .{ fx, fy + 1, fz + 1 }, .{ fx, fy + 1, fz }, .{ fx + 1, fy + 1, fz }, .{ fx + 1, fy + 1, fz + 1 } }, .shade_idx = 3 },
-                        // -Z face (back)
-                        .{ .check_pos = .{ @as(i32, @intCast(x)), @as(i32, @intCast(y)), @as(i32, @intCast(z)) - 1 }, .verts = .{ .{ fx + 1, fy, fz }, .{ fx + 1, fy + 1, fz }, .{ fx, fy + 1, fz }, .{ fx, fy, fz } }, .shade_idx = 4 },
-                        // +Z face (front)
-                        .{ .check_pos = .{ @as(i32, @intCast(x)), @as(i32, @intCast(y)), @as(i32, @intCast(z)) + 1 }, .verts = .{ .{ fx, fy, fz + 1 }, .{ fx, fy + 1, fz + 1 }, .{ fx + 1, fy + 1, fz + 1 }, .{ fx + 1, fy, fz + 1 } }, .shade_idx = 5 },
-                    };
+                        const b1 = w.get(pos1[0], pos1[1], pos1[2]);
+                        const b2 = w.get(pos2[0], pos2[1], pos2[2]);
 
-                    for (faces) |face| {
-                        // Check if adjacent block is air or out of bounds
-                        const adjacent_block = w.get(face.check_pos[0], face.check_pos[1], face.check_pos[2]);
-                        if (adjacent_block != 0) continue; // Face is hidden
+                        // Face exists if blocks differ and one is solid
+                        mask[j * 64 + i] = if (b1 != 0 and b2 == 0) b1 else if (b1 == 0 and b2 != 0) b2 | 0x80 else 0;
+                    }
+                }
 
+                // Generate quads from mask
+                var j: usize = 0;
+                while (j < 64) : (j += 1) {
+                    var i: usize = 0;
+                    while (i < 64) {
+                        const face_block = mask[j * 64 + i];
+                        if (face_block == 0) {
+                            i += 1;
+                            continue;
+                        }
+
+                        const is_back_face = (face_block & 0x80) != 0;
+                        const block_type = face_block & 0x7F;
+
+                        // Find width - extend right while same block type
+                        var width: usize = 1;
+                        while (i + width < 64 and mask[j * 64 + i + width] == face_block) width += 1;
+
+                        // Find height - extend up while entire row matches
+                        var height: usize = 1;
+                        while (j + height < 64) {
+                            var row_matches = true;
+                            for (0..width) |k| {
+                                if (mask[(j + height) * 64 + i + k] != face_block) {
+                                    row_matches = false;
+                                    break;
+                                }
+                            }
+                            if (!row_matches) break;
+                            height += 1;
+                        }
+
+                        // Clear processed area
+                        for (0..height) |h| {
+                            for (0..width) |w_idx| {
+                                mask[(j + h) * 64 + i + w_idx] = 0;
+                            }
+                        }
+
+                        // Generate quad vertices
                         if (vi + 4 > verts.len or ii + 6 > indices.len) return .{ .verts = vi, .indices = ii };
 
-                        const shade = shades[face.shade_idx];
+                        const col = colors(block_type);
+                        const shade_offset: usize = if (is_back_face) 0 else 1;
+                        const shade_idx = axis * 2 + shade_offset;
+                        const shade = shades[shade_idx];
                         const fcol = [4]f32{ col[0] * shade, col[1] * shade, col[2] * shade, 1 };
+
+                        var quad = [4][3]f32{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } };
+                        const face_offset: f32 = if (is_back_face) 0.0 else 1.0;
+                        const face_pos: f32 = @as(f32, @floatFromInt(d)) + face_offset;
+
+                        quad[0][axis] = face_pos;
+                        quad[0][u] = @floatFromInt(i);
+                        quad[0][v] = @floatFromInt(j);
+
+                        quad[1][axis] = face_pos;
+                        quad[1][u] = @floatFromInt(i);
+                        quad[1][v] = @floatFromInt(j + height);
+
+                        quad[2][axis] = face_pos;
+                        quad[2][u] = @floatFromInt(i + width);
+                        quad[2][v] = @floatFromInt(j + height);
+
+                        quad[3][axis] = face_pos;
+                        quad[3][u] = @floatFromInt(i + width);
+                        quad[3][v] = @floatFromInt(j);
+
                         const base = @as(u16, @intCast(vi));
 
-                        for (face.verts) |pos| {
-                            verts[vi] = .{ .pos = pos, .col = fcol };
-                            vi += 1;
+                        // Wind vertices correctly for face direction
+                        if (is_back_face) {
+                            verts[vi] = .{ .pos = quad[0], .col = fcol };
+                            verts[vi + 1] = .{ .pos = quad[3], .col = fcol };
+                            verts[vi + 2] = .{ .pos = quad[2], .col = fcol };
+                            verts[vi + 3] = .{ .pos = quad[1], .col = fcol };
+                        } else {
+                            verts[vi] = .{ .pos = quad[0], .col = fcol };
+                            verts[vi + 1] = .{ .pos = quad[1], .col = fcol };
+                            verts[vi + 2] = .{ .pos = quad[2], .col = fcol };
+                            verts[vi + 3] = .{ .pos = quad[3], .col = fcol };
                         }
+
+                        vi += 4;
 
                         for ([_]u16{ 0, 1, 2, 0, 2, 3 }) |idx| {
                             indices[ii] = base + idx;
                             ii += 1;
                         }
+
+                        i += width;
                     }
                 }
             }
