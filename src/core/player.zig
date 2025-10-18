@@ -11,31 +11,6 @@ const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
 const World = world.World;
 
-pub const Weapon = struct {
-    charge: f32 = 0,
-    cool: f32 = 0,
-
-    const cfg = struct {
-        const rate = 2.0;
-        const min_charge = 0.1;
-        const cooldown = 0.3;
-    };
-
-    pub fn tick(w: *Weapon, dt: f32, wish: bool) void {
-        w.cool = @max(0, w.cool - dt);
-        const r = cfg.rate * dt;
-        w.charge = if (wish and w.cool == 0) @min(1.0, w.charge + r) else @max(0, w.charge - r * 2);
-    }
-    pub fn fire(w: *Weapon) ?f32 {
-        if (w.cool > 0 or w.charge < cfg.min_charge) return null;
-        defer {
-            w.charge = 0;
-            w.cool = cfg.cooldown;
-        }
-        return w.charge;
-    }
-};
-
 pub const Player = struct {
     pos: Vec3,
     vel: Vec3,
@@ -43,7 +18,7 @@ pub const Player = struct {
     pitch: f32,
     ground: bool,
     crouch: bool,
-    weapon: Weapon,
+
     io: io.IO,
     block: world.Block,
     cool: f32,
@@ -55,19 +30,15 @@ pub const Player = struct {
             const z = 32.0;
         };
         const ui = struct {
-            const cross_base = 8.0;
-            const cross_scale = 12.0;
-            const alpha_base = 0.7;
-            const alpha_scale = 0.3;
+            const crosshair_size = 8.0;
             const hud_x = 10.0;
             const hud_y = 10.0;
             const hud_w = 200.0;
-            const hud_h = 140.0;
+            const hud_h = 120.0;
         };
         const input = struct {
             const sens = 0.002;
             const pitch_limit = 1.57;
-            const fire_min = 0.1;
         };
         const size = struct {
             const stand = 1.8;
@@ -92,43 +63,38 @@ pub const Player = struct {
         const jump = struct {
             const power = 8.0;
         };
-        const shoot = struct {
-            const force = 12.5;
-            const jump_min = 0.5;
-            const jump_boost = 2.0;
-        };
+
         const reach = 5.0;
         const block_cool = 0.15;
     };
 
     pub fn drawUI(p: *const Player) void {
         const w, const h = .{ sapp.widthf(), sapp.heightf() };
-        const cx, const cy = .{ w * 0.5, h * 0.5 };
-        const size = cfg.ui.cross_base + p.weapon.charge * cfg.ui.cross_scale;
-        const alpha = cfg.ui.alpha_base + p.weapon.charge * cfg.ui.alpha_scale;
 
+        // Simple crosshair
         ig.igSetNextWindowPos(.{ .x = 0, .y = 0 }, ig.ImGuiCond_Always);
         ig.igSetNextWindowSize(.{ .x = w, .y = h }, ig.ImGuiCond_Always);
         const flags = ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar | ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoInputs;
-        if (ig.igBegin("Cross", null, flags)) {
+        if (ig.igBegin("Crosshair", null, flags)) {
             const dl = ig.igGetWindowDrawList();
-            const col = ig.igColorConvertFloat4ToU32(.{ .x = 1, .y = 1, .z = 1, .w = alpha });
+            const cx, const cy = .{ w * 0.5, h * 0.5 };
+            const size = cfg.ui.crosshair_size;
+            const col = ig.igColorConvertFloat4ToU32(.{ .x = 1, .y = 1, .z = 1, .w = 0.8 });
             ig.ImDrawList_AddLine(dl, .{ .x = cx - size, .y = cy }, .{ .x = cx + size, .y = cy }, col);
             ig.ImDrawList_AddLine(dl, .{ .x = cx, .y = cy - size }, .{ .x = cx, .y = cy + size }, col);
         }
         ig.igEnd();
 
+        // HUD
         ig.igSetNextWindowPos(.{ .x = cfg.ui.hud_x, .y = cfg.ui.hud_y }, ig.ImGuiCond_Once);
         ig.igSetNextWindowSize(.{ .x = cfg.ui.hud_w, .y = cfg.ui.hud_h }, ig.ImGuiCond_Once);
         var show = true;
         if (ig.igBegin("HUD", &show, ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoCollapse)) {
             _ = ig.igText("Pos: %.1f, %.1f, %.1f", p.pos.data[0], p.pos.data[1], p.pos.data[2]);
             _ = ig.igText("Vel: %.1f, %.1f, %.1f", p.vel.data[0], p.vel.data[1], p.vel.data[2]);
-            _ = ig.igText("Yaw: %.2f", p.yaw);
-            _ = ig.igText("Pitch: %.2f", p.pitch);
             _ = ig.igText("Ground: %s", if (p.ground) "Yes".ptr else "No".ptr);
             _ = ig.igText("Crouch: %s", if (p.crouch) "Yes".ptr else "No".ptr);
-            _ = ig.igText("Charge: %.2f", p.weapon.charge);
+
             const block_color = world.World.color(p.block);
             _ = ig.igColorButton("##color_preview", .{ .x = block_color[0], .y = block_color[1], .z = block_color[2], .w = 1.0 }, ig.ImGuiColorEditFlags_NoTooltip);
             ig.igSameLine();
@@ -138,14 +104,13 @@ pub const Player = struct {
     }
 
     pub fn init() Player {
-        return .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .weapon = .{}, .io = .{}, .block = 0b11100011, .cool = 0 }; // start with red
+        return .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .io = .{}, .block = 0b11100011, .cool = 0 };
     }
 
     pub fn tick(p: *Player, w: *World, dt: f32) bool {
         p.cool = @max(0, p.cool - dt);
         const changed = p.input(w, dt);
         p.physics(w, dt);
-        p.weapon.tick(dt, p.io.mouse.right and p.io.mouse.locked());
         return changed;
     }
 
@@ -175,10 +140,9 @@ pub const Player = struct {
         if (p.io.mouse.locked()) {
             p.yaw += p.io.mouse.dx * cfg.input.sens;
             p.pitch = @max(-cfg.input.pitch_limit, @min(cfg.input.pitch_limit, p.pitch + p.io.mouse.dy * cfg.input.sens));
-            if (p.io.mouse.left and p.weapon.charge > cfg.input.fire_min) if (p.weapon.fire()) |power| p.shoot(power);
 
             // Block interactions
-            if (p.cool == 0 and p.weapon.charge < cfg.input.fire_min) {
+            if (p.cool == 0) {
                 const look = Vec3.new(@sin(p.yaw) * @cos(p.pitch), -@sin(p.pitch), -@cos(p.yaw) * @cos(p.pitch));
                 if (w.raycast(p.pos, look, cfg.reach)) |hit| {
                     const pos = [3]i32{ @intFromFloat(@floor(hit.data[0])), @intFromFloat(@floor(hit.data[1])), @intFromFloat(@floor(hit.data[2])) };
@@ -186,7 +150,7 @@ pub const Player = struct {
                     if (p.io.mouse.left and w.set(pos[0], pos[1], pos[2], 0)) {
                         world_changed = true;
                         p.cool = cfg.block_cool;
-                    } else if (p.io.mouse.right and p.weapon.charge == 0) {
+                    } else if (p.io.mouse.right) {
                         const prev = hit.sub(look.scale(0.1));
                         const place_pos = [3]i32{ @intFromFloat(@floor(prev.data[0])), @intFromFloat(@floor(prev.data[1])), @intFromFloat(@floor(prev.data[2])) };
                         if (w.set(place_pos[0], place_pos[1], place_pos[2], p.block)) {
@@ -241,16 +205,6 @@ pub const Player = struct {
         const f = @max(0, s - @max(s, cfg.friction.min_speed) * cfg.friction.factor * dt) / s;
         p.vel.data[0] *= f;
         p.vel.data[2] *= f;
-    }
-
-    fn shoot(p: *Player, power: f32) void {
-        const cy, const sy, const cp, const sp = .{ @cos(p.yaw), @sin(p.yaw), @cos(p.pitch), @sin(p.pitch) };
-        const dir = Vec3.new(sy * cp, -sp, -cy * cp);
-        p.vel = p.vel.add(dir.scale(-cfg.shoot.force * power * power));
-        if (p.ground and power > cfg.shoot.jump_min) {
-            p.vel.data[1] += cfg.shoot.jump_boost * power;
-            p.ground = false;
-        }
     }
 
     pub fn view(p: *Player) Mat4 {
