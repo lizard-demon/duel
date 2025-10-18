@@ -16,6 +16,36 @@ const V = alg.Vec3;
 const M = alg.Mat4;
 const W = world.World;
 
+const Weapon = struct {
+    charge: f32,
+    cooldown: f32,
+
+    const MAX_CHARGE: f32 = 1.0;
+    const CHARGE_RATE: f32 = 2.0;
+    const COOLDOWN_TIME: f32 = 0.3;
+
+    fn init() Weapon {
+        return .{ .charge = 0, .cooldown = 0 };
+    }
+
+    fn update(w: *Weapon, dt: f32, charging: bool) void {
+        w.cooldown = @max(0, w.cooldown - dt);
+        if (charging and w.cooldown == 0) {
+            w.charge = @min(MAX_CHARGE, w.charge + CHARGE_RATE * dt);
+        } else {
+            w.charge = @max(0, w.charge - CHARGE_RATE * 2 * dt);
+        }
+    }
+
+    fn fire(w: *Weapon) ?f32 {
+        if (w.cooldown > 0 or w.charge < 0.1) return null;
+        const power = w.charge;
+        w.charge = 0;
+        w.cooldown = COOLDOWN_TIME;
+        return power;
+    }
+};
+
 const Player = struct {
     pos: V,
     vel: V,
@@ -23,6 +53,7 @@ const Player = struct {
     pitch: f32,
     on_ground: bool,
     crouching: bool,
+    weapon: Weapon,
     io: input.IO,
 
     const GRAVITY: f32 = 20;
@@ -41,6 +72,7 @@ const Player = struct {
             .pitch = 0,
             .on_ground = false,
             .crouching = false,
+            .weapon = Weapon.init(),
             .io = .{},
         };
     }
@@ -48,6 +80,7 @@ const Player = struct {
     fn update(p: *Player, w: *const W, dt: f32) void {
         p.handleInput(w, dt);
         p.updatePhysics(w, dt);
+        p.weapon.update(dt, p.io.mouse.right and p.io.mouse.isLocked());
     }
 
     fn handleInput(p: *Player, w: *const W, dt: f32) void {
@@ -73,6 +106,12 @@ const Player = struct {
         if (p.io.mouse.isLocked()) {
             p.yaw += p.io.mouse.dx * 0.002;
             p.pitch = @max(-1.57, @min(1.57, p.pitch + p.io.mouse.dy * 0.002));
+
+            if (!p.io.mouse.right and p.weapon.charge > 0.1) {
+                if (p.weapon.fire()) |power| {
+                    p.fireWeapon(power);
+                }
+            }
         }
         if (p.io.justPressed(.escape)) p.io.mouse.unlock();
         if (p.io.mouse.left and !p.io.mouse.isLocked()) p.io.mouse.lock();
@@ -111,6 +150,22 @@ const Player = struct {
         p.vel.data[2] *= sc;
     }
 
+    fn fireWeapon(p: *Player, power: f32) void {
+        const cy = @cos(p.yaw);
+        const sy = @sin(p.yaw);
+        const cp = @cos(p.pitch);
+        const sp = @sin(p.pitch);
+
+        const dir = V.new(sy * cp, -sp, -cy * cp);
+        const force = 12.5 * power * power;
+        p.vel = p.vel.add(dir.scale(-force));
+
+        if (p.on_ground and power > 0.5) {
+            p.vel.data[1] += 2.0 * power;
+            p.on_ground = false;
+        }
+    }
+
     fn getViewMatrix(p: *Player) M {
         const cy = @cos(p.yaw);
         const sy = @sin(p.yaw);
@@ -126,7 +181,7 @@ const Player = struct {
 
     fn drawHUD(p: *Player) void {
         ig.igSetNextWindowPos(.{ .x = 10, .y = 10 }, ig.ImGuiCond_Once);
-        ig.igSetNextWindowSize(.{ .x = 200, .y = 120 }, ig.ImGuiCond_Once);
+        ig.igSetNextWindowSize(.{ .x = 200, .y = 140 }, ig.ImGuiCond_Once);
         var show_hud = true;
         if (ig.igBegin("Player HUD", &show_hud, ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoCollapse)) {
             _ = ig.igText("Pos: %.1f, %.1f, %.1f", p.pos.data[0], p.pos.data[1], p.pos.data[2]);
@@ -135,6 +190,28 @@ const Player = struct {
             _ = ig.igText("Pitch: %.2f", p.pitch);
             _ = ig.igText("Ground: %s", if (p.on_ground) "Yes".ptr else "No".ptr);
             _ = ig.igText("Crouch: %s", if (p.crouching) "Yes".ptr else "No".ptr);
+            _ = ig.igText("Charge: %.2f", p.weapon.charge);
+        }
+        ig.igEnd();
+
+        p.drawCrosshair();
+    }
+
+    fn drawCrosshair(p: *Player) void {
+        const w = sapp.widthf();
+        const h = sapp.heightf();
+        const cx = w * 0.5;
+        const cy = h * 0.5;
+        const size = 8.0 + p.weapon.charge * 12.0;
+        const alpha = 0.7 + p.weapon.charge * 0.3;
+
+        ig.igSetNextWindowPos(.{ .x = 0, .y = 0 }, ig.ImGuiCond_Always);
+        ig.igSetNextWindowSize(.{ .x = w, .y = h }, ig.ImGuiCond_Always);
+        if (ig.igBegin("Crosshair", null, ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar | ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoInputs)) {
+            const draw_list = ig.igGetWindowDrawList();
+            const col = ig.igColorConvertFloat4ToU32(.{ .x = 1, .y = 1, .z = 1, .w = alpha });
+            ig.ImDrawList_AddLine(draw_list, .{ .x = cx - size, .y = cy }, .{ .x = cx + size, .y = cy }, col);
+            ig.ImDrawList_AddLine(draw_list, .{ .x = cx, .y = cy - size }, .{ .x = cx, .y = cy + size }, col);
         }
         ig.igEnd();
     }
