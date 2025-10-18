@@ -8,14 +8,14 @@ pub const Vec3 = struct {
     pub fn zero() Vec3 {
         return .{ .data = @splat(0) };
     }
-    pub fn add(self: Vec3, o: Vec3) Vec3 {
-        return .{ .data = self.data + o.data };
+    pub fn add(v: Vec3, o: Vec3) Vec3 {
+        return .{ .data = v.data + o.data };
     }
-    pub fn scale(self: Vec3, s: f32) Vec3 {
-        return .{ .data = self.data * @as(@Vector(3, f32), @splat(s)) };
+    pub fn scale(v: Vec3, s: f32) Vec3 {
+        return .{ .data = v.data * @as(@Vector(3, f32), @splat(s)) };
     }
-    pub fn dot(self: Vec3, o: Vec3) f32 {
-        return @reduce(.Add, self.data * o.data);
+    pub fn dot(v: Vec3, o: Vec3) f32 {
+        return @reduce(.Add, v.data * o.data);
     }
 };
 

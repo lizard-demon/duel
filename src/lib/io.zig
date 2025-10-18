@@ -292,12 +292,12 @@ pub const Mouse = struct {
         sapp.lockMouse(false);
     }
 
-    pub fn isLocked(_: *const Mouse) bool {
+    pub fn locked(_: *const Mouse) bool {
         return sapp.mouseLocked();
     }
 
     pub fn toggle(self: *Mouse) void {
-        if (self.isLocked()) self.unlock() else self.lock();
+        if (self.locked()) self.unlock() else self.lock();
     }
 
     pub fn show(_: *Mouse) void {
@@ -308,7 +308,7 @@ pub const Mouse = struct {
         sapp.showMouse(false);
     }
 
-    pub fn isShown(_: *const Mouse) bool {
+    pub fn shown(_: *const Mouse) bool {
         return sapp.mouseShown();
     }
 
@@ -390,7 +390,7 @@ pub const IO = struct {
     }
 
     // Clear per-frame input state - call at end of frame after reading input
-    pub fn cleanInput(self: *IO) void {
+    pub fn clean(self: *IO) void {
         // Copy key state for justPressed/justReleased detection
         @memcpy(&self.keys_prev, &self.keys);
 
@@ -408,7 +408,7 @@ pub const IO = struct {
         self.window_resized = false;
     }
 
-    pub fn update(self: *IO, ev: [*c]const sapp.Event) void {
+    pub fn tick(self: *IO, ev: [*c]const sapp.Event) void {
         const e = ev.*;
         self.frame_count = e.frame_count;
 

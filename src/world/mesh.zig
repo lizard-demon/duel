@@ -1,9 +1,9 @@
 const std = @import("std");
-const rend = @import("render.zig");
-const octree = @import("map.zig");
-const Block = octree.Block;
+const gfx = @import("draw.zig");
+const world = @import("world.zig");
+const Block = world.Block;
 
-pub fn buildMesh(w: anytype, verts: []rend.Vertex, indices: []u16, comptime colors: fn (Block) [3]f32) struct { vcount: usize, icount: usize } {
+pub fn mesh(w: anytype, verts: []gfx.Vertex, indices: []u16, comptime colors: fn (Block) [3]f32) struct { verts: usize, indices: usize } {
     var mask: [4096]bool = std.mem.zeroes([4096]bool);
     var vi: usize = 0;
     var ii: usize = 0;
@@ -85,7 +85,7 @@ pub fn buildMesh(w: anytype, verts: []rend.Vertex, indices: []u16, comptime colo
                             quad[2] = .{ quad[0][0] + du[0] + dv[0], quad[0][1] + du[1] + dv[1], quad[0][2] + du[2] + dv[2] };
                             quad[3] = .{ quad[0][0] + dv[0], quad[0][1] + dv[1], quad[0][2] + dv[2] };
                         }
-                        if (vi + 4 > verts.len or ii + 6 > indices.len) return .{ .vcount = vi, .icount = ii };
+                        if (vi + 4 > verts.len or ii + 6 > indices.len) return .{ .verts = vi, .indices = ii };
                         const base = @as(u16, @intCast(vi));
                         for (quad) |p| {
                             verts[vi] = .{ .pos = p, .col = fcol };
@@ -105,5 +105,5 @@ pub fn buildMesh(w: anytype, verts: []rend.Vertex, indices: []u16, comptime colo
             }
         }
     }
-    return .{ .vcount = vi, .icount = ii };
+    return .{ .verts = vi, .indices = ii };
 }
