@@ -37,6 +37,17 @@ pub const AABB = struct {
 
 pub const World = struct {
     blocks: [64][64][64]Block,
+
+    const COLORS = [_][3]f32{
+        .{ 0, 0, 0 }, // air
+        .{ 0.3, 0.7, 0.3 }, // grass
+        .{ 0.5, 0.35, 0.2 }, // dirt
+        .{ 0.5, 0.5, 0.5 }, // stone
+    };
+
+    pub fn blockColor(block: Block) [3]f32 {
+        return COLORS[@intFromEnum(block)];
+    }
     pub fn init() World {
         var w = World{ .blocks = std.mem.zeroes([64][64][64]Block) };
         for (0..64) |x| for (0..64) |y| for (0..64) |z| {
