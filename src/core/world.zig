@@ -165,7 +165,7 @@ pub const World = struct {
                 break;
             }
             hit = true;
-            p = p.add(v.scale(@max(0, c - 0.001)));
+            p = p.add(v.scale(@max(0, c - 0.01)));
             const d = n.dot(v);
             v = v.sub(n.scale(d));
             if (@sqrt(v.dot(v)) < 0.0001) break;
