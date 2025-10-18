@@ -129,14 +129,10 @@ pub const Player = struct {
             _ = ig.igText("Ground: %s", if (p.ground) "Yes".ptr else "No".ptr);
             _ = ig.igText("Crouch: %s", if (p.crouch) "Yes".ptr else "No".ptr);
             _ = ig.igText("Charge: %.2f", p.weapon.charge);
-            _ = ig.igText("Block: %d", p.block);
             const block_color = world.World.color(p.block);
-            _ = ig.igText("Color: %.2f, %.2f, %.2f", block_color[0], block_color[1], block_color[2]);
-
-            // Show color preview
             _ = ig.igColorButton("##color_preview", .{ .x = block_color[0], .y = block_color[1], .z = block_color[2], .w = 1.0 }, ig.ImGuiColorEditFlags_NoTooltip);
             ig.igSameLine();
-            _ = ig.igText("Q/E to change");
+            _ = ig.igText("Color %d (Q/E)", p.block);
         }
         ig.igEnd();
     }
@@ -185,14 +181,15 @@ pub const Player = struct {
             if (p.cool == 0 and p.weapon.charge < cfg.input.fire_min) {
                 const look = Vec3.new(@sin(p.yaw) * @cos(p.pitch), -@sin(p.pitch), -@cos(p.yaw) * @cos(p.pitch));
                 if (w.raycast(p.pos, look, cfg.reach)) |hit| {
-                    const x, const y, const z = .{ @as(i32, @intFromFloat(@floor(hit.data[0]))), @as(i32, @intFromFloat(@floor(hit.data[1]))), @as(i32, @intFromFloat(@floor(hit.data[2]))) };
-                    if (p.io.mouse.left and w.set(x, y, z, 0)) { // set to air (0)
+                    const pos = [3]i32{ @intFromFloat(@floor(hit.data[0])), @intFromFloat(@floor(hit.data[1])), @intFromFloat(@floor(hit.data[2])) };
+
+                    if (p.io.mouse.left and w.set(pos[0], pos[1], pos[2], 0)) {
                         world_changed = true;
                         p.cool = cfg.block_cool;
                     } else if (p.io.mouse.right and p.weapon.charge == 0) {
                         const prev = hit.sub(look.scale(0.1));
-                        const px, const py, const pz = .{ @as(i32, @intFromFloat(@floor(prev.data[0]))), @as(i32, @intFromFloat(@floor(prev.data[1]))), @as(i32, @intFromFloat(@floor(prev.data[2]))) };
-                        if (w.set(px, py, pz, p.block)) {
+                        const place_pos = [3]i32{ @intFromFloat(@floor(prev.data[0])), @intFromFloat(@floor(prev.data[1])), @intFromFloat(@floor(prev.data[2])) };
+                        if (w.set(place_pos[0], place_pos[1], place_pos[2], p.block)) {
                             world_changed = true;
                             p.cool = cfg.block_cool;
                         }
@@ -202,10 +199,10 @@ pub const Player = struct {
 
             // Color selection with Q and E keys
             if (p.io.justPressed(.q)) {
-                p.block = if (p.block > 1) p.block - 1 else 255; // cycle down, wrap to 255
+                p.block = if (p.block > 1) p.block - 1 else 255;
             }
             if (p.io.justPressed(.e)) {
-                p.block = if (p.block < 255) p.block + 1 else 1; // cycle up, wrap to 1 (skip air)
+                p.block = if (p.block < 255) p.block + 1 else 1;
             }
         }
         if (p.io.justPressed(.escape)) p.io.mouse.unlock();

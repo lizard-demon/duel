@@ -56,17 +56,19 @@ pub const World = struct {
     pub fn init() World {
         var w = World{ .blocks = std.mem.zeroes([64][64][64]Block) };
         for (0..64) |x| for (0..64) |y| for (0..64) |z| {
-            const e = x == 0 or x == 63 or z == 0 or z == 63;
-            w.blocks[x][y][z] = if (e) if (y < 63) 0b11100000 else 0b00011100 else if (y == 0) 0b00011100 else 0; // gray walls, green floor
+            const wall = x == 0 or x == 63 or z == 0 or z == 63;
+            const floor = y == 0;
+            w.blocks[x][y][z] = if (wall and y < 63) 0b11100000 else if (floor) 0b00011100 else 0;
         };
         return w;
     }
     pub fn get(w: *const World, x: i32, y: i32, z: i32) Block {
-        if (x < 0 or x >= 64 or y < 0 or y >= 64 or z < 0 or z >= 64) return 0; // air
+        if (x < 0 or x >= 64 or y < 0 or y >= 64 or z < 0 or z >= 64) return 0;
         return w.blocks[@intCast(x)][@intCast(y)][@intCast(z)];
     }
+
     pub fn solid(w: *const World, x: i32, y: i32, z: i32) bool {
-        return w.get(x, y, z) != 0; // air is 0
+        return w.get(x, y, z) != 0;
     }
 
     pub fn set(w: *World, x: i32, y: i32, z: i32, block: Block) bool {
@@ -162,13 +164,13 @@ pub const World = struct {
                             pos[ax.u] = @intCast(u);
                             pos[ax.v] = @intCast(v);
                             const blk = w.get(pos[0], pos[1], pos[2]);
-                            if (blk == 0) { // air
+                            if (blk == 0) {
                                 mask[n] = false;
                                 n += 1;
                                 continue;
                             }
                             pos[ax.d] += stp;
-                            mask[n] = w.get(pos[0], pos[1], pos[2]) == 0; // air
+                            mask[n] = w.get(pos[0], pos[1], pos[2]) == 0;
                             n += 1;
                         }
                     }
