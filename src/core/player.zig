@@ -36,7 +36,7 @@ pub const Player = struct {
             const crosshair_alpha = 0.8;
             const hud_x = 10.0;
             const hud_y = 10.0;
-            const hud_w = 150.0;
+            const hud_w = 160.0;
             const hud_h = 50.0;
         };
         const input = struct {
@@ -49,7 +49,8 @@ pub const Player = struct {
             const width = 0.4;
         };
         const move = struct {
-            const speed = 7.0;
+            const speed = 6.0;
+            const crouch_speed = speed / 2.0;
             const air_cap = 0.7;
             const accel = 70.0;
             const min_len = 0.001;
@@ -229,7 +230,8 @@ pub const Player = struct {
         const len = @sqrt(dir.data[0] * dir.data[0] + dir.data[2] * dir.data[2]);
         if (len < cfg.move.min_len) return if (p.ground) p.friction(dt);
         const wish = Vec3.new(dir.data[0] / len, 0, dir.data[2] / len);
-        const max = if (p.ground) cfg.move.speed * len else @min(cfg.move.speed * len, cfg.move.air_cap);
+        const base_speed: f32 = if (p.crouch) cfg.move.crouch_speed else cfg.move.speed;
+        const max = if (p.ground) base_speed * len else @min(base_speed * len, cfg.move.air_cap);
         const add = @max(0, max - p.vel.dot(wish));
         if (add > 0) p.vel = p.vel.add(wish.scale(@min(cfg.move.accel * dt, add)));
         if (p.ground) p.friction(dt);
