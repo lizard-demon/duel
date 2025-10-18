@@ -150,7 +150,14 @@ pub const Player = struct {
                     } else if (p.io.mouse.rightPressed()) {
                         const prev = hit.sub(look.scale(0.1));
                         const place_pos = [3]i32{ @intFromFloat(@floor(prev.data[0])), @intFromFloat(@floor(prev.data[1])), @intFromFloat(@floor(prev.data[2])) };
-                        if (w.set(place_pos[0], place_pos[1], place_pos[2], p.block)) {
+                        const block_pos = Vec3.new(@floatFromInt(place_pos[0]), @floatFromInt(place_pos[1]), @floatFromInt(place_pos[2]));
+                        const h: f32 = if (p.crouch) cfg.size.crouch else cfg.size.stand;
+                        const player_box = world.AABB{ .min = p.pos.add(Vec3.new(-cfg.size.width, -h / 2.0, -cfg.size.width)), .max = p.pos.add(Vec3.new(cfg.size.width, h / 2.0, cfg.size.width)) };
+                        const block_box = world.AABB{ .min = block_pos, .max = block_pos.add(Vec3.new(1, 1, 1)) };
+                        const overlaps = player_box.min.data[0] < block_box.max.data[0] and player_box.max.data[0] > block_box.min.data[0] and
+                            player_box.min.data[1] < block_box.max.data[1] and player_box.max.data[1] > block_box.min.data[1] and
+                            player_box.min.data[2] < block_box.max.data[2] and player_box.max.data[2] > block_box.min.data[2];
+                        if (!overlaps and w.set(place_pos[0], place_pos[1], place_pos[2], p.block)) {
                             world_changed = true;
                             p.cool = cfg.block_cool;
                         }
