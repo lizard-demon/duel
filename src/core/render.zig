@@ -28,6 +28,13 @@ pub const Render = struct {
         layout.attrs[1].format = .FLOAT4;
         r.pipe = sg.makePipeline(.{ .shader = sg.makeShader(desc), .layout = layout, .index_type = .UINT16, .depth = .{ .compare = .LESS_EQUAL, .write_enabled = true }, .cull_mode = .BACK });
     }
+
+    pub fn shaderFromHandle(r: *Render, sh: sg.Shader) void {
+        var layout = sg.VertexLayoutState{};
+        layout.attrs[0].format = .FLOAT3;
+        layout.attrs[1].format = .FLOAT4;
+        r.pipe = sg.makePipeline(.{ .shader = sh, .layout = layout, .index_type = .UINT16, .depth = .{ .compare = .LESS_EQUAL, .write_enabled = true }, .cull_mode = .BACK });
+    }
     pub fn draw(r: Render, mvp: Mat4) void {
         sg.applyPipeline(r.pipe);
         sg.applyBindings(r.bind);

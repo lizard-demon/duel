@@ -65,11 +65,82 @@ pub const World = struct {
         return w.get(x, y, z) != .air;
     }
 
+    pub fn set(w: *World, x: i32, y: i32, z: i32, block: Block) bool {
+        if (x < 0 or x >= 64 or y < 0 or y >= 64 or z < 0 or z >= 64) return false;
+        const old_block = w.blocks[@intCast(x)][@intCast(y)][@intCast(z)];
+        if (old_block == block) return false;
+        w.blocks[@intCast(x)][@intCast(y)][@intCast(z)] = block;
+        return true;
+    }
+
+    pub const RaycastResult = struct {
+        hit: bool,
+        pos: Vec3,
+        block_pos: Vec3,
+        normal: Vec3,
+        distance: f32,
+        block: Block,
+    };
+
+    pub fn raycast(w: *const World, origin: Vec3, direction: Vec3, max_distance: f32) RaycastResult {
+        const step_size = 0.1;
+        const steps = @as(i32, @intFromFloat(max_distance / step_size));
+
+        var current = origin;
+        var prev = origin;
+
+        for (0..@intCast(steps)) |_| {
+            prev = current;
+            current = current.add(direction.scale(step_size));
+
+            const x = @as(i32, @intFromFloat(@floor(current.data[0])));
+            const y = @as(i32, @intFromFloat(@floor(current.data[1])));
+            const z = @as(i32, @intFromFloat(@floor(current.data[2])));
+
+            if (w.solid(x, y, z)) {
+                const block_center = Vec3.new(@as(f32, @floatFromInt(x)) + 0.5, @as(f32, @floatFromInt(y)) + 0.5, @as(f32, @floatFromInt(z)) + 0.5);
+                const to_hit = current.sub(block_center);
+
+                // Determine which face was hit by finding the largest component
+                var normal = Vec3.zero();
+                const abs_x = @abs(to_hit.data[0]);
+                const abs_y = @abs(to_hit.data[1]);
+                const abs_z = @abs(to_hit.data[2]);
+
+                if (abs_x >= abs_y and abs_x >= abs_z) {
+                    normal.data[0] = if (to_hit.data[0] > 0) 1 else -1;
+                } else if (abs_y >= abs_z) {
+                    normal.data[1] = if (to_hit.data[1] > 0) 1 else -1;
+                } else {
+                    normal.data[2] = if (to_hit.data[2] > 0) 1 else -1;
+                }
+
+                return RaycastResult{
+                    .hit = true,
+                    .pos = prev,
+                    .block_pos = Vec3.new(@as(f32, @floatFromInt(x)), @as(f32, @floatFromInt(y)), @as(f32, @floatFromInt(z))),
+                    .normal = normal,
+                    .distance = origin.sub(prev).length(),
+                    .block = w.get(x, y, z),
+                };
+            }
+        }
+
+        return RaycastResult{
+            .hit = false,
+            .pos = Vec3.zero(),
+            .block_pos = Vec3.zero(),
+            .normal = Vec3.zero(),
+            .distance = max_distance,
+            .block = .air,
+        };
+    }
+
     pub fn sweep(w: *const World, pos: Vec3, box: AABB, vel: Vec3, comptime steps: comptime_int) struct { pos: Vec3, vel: Vec3, hit: bool } {
         var p = pos;
         var v = vel;
         var hit = false;
-        const dt: f32 = 1 / @as(f32, @floatFromInt(steps));
+        const dt: f32 = 1.0 / @as(f32, @floatFromInt(steps));
         inline for (0..steps) |_| {
             const r = w.step(p, box, v.scale(dt));
             p = r.pos;
@@ -96,7 +167,7 @@ pub const World = struct {
                     var z = @as(i32, @intFromFloat(@floor(rg.min.data[2])));
                     while (z <= @as(i32, @intFromFloat(@floor(rg.max.data[2])))) : (z += 1) {
                         if (!w.solid(x, y, z)) continue;
-                        const b = Vec3.new(@floatFromInt(x), @floatFromInt(y), @floatFromInt(z));
+                        const b = Vec3.new(@as(f32, @floatFromInt(x)), @as(f32, @floatFromInt(y)), @as(f32, @floatFromInt(z)));
                         if (pl.sweep(v, .{ .min = b, .max = b.add(Vec3.new(1, 1, 1)) })) |col| if (col.t < c) {
                             c = col.t;
                             n = col.n;
@@ -186,11 +257,11 @@ pub const World = struct {
                             var quad = [4][3]f32{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } };
                             var du = [3]f32{ 0, 0, 0 };
                             var dv = [3]f32{ 0, 0, 0 };
-                            du[ax.u] = @floatFromInt(wid);
-                            dv[ax.v] = @floatFromInt(h);
-                            const x: f32 = @floatFromInt(pos[0]);
-                            const y: f32 = @floatFromInt(pos[1]);
-                            const z: f32 = @floatFromInt(pos[2]);
+                            du[ax.u] = @as(f32, @floatFromInt(wid));
+                            dv[ax.v] = @as(f32, @floatFromInt(h));
+                            const x: f32 = @as(f32, @floatFromInt(pos[0]));
+                            const y: f32 = @as(f32, @floatFromInt(pos[1]));
+                            const z: f32 = @as(f32, @floatFromInt(pos[2]));
                             quad[0] = .{ x, y, z };
                             if (back == 1) {
                                 quad[0][ax.d] += 1;

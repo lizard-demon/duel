@@ -28,6 +28,8 @@ const Game = struct {
     player: Player,
     world: World,
     alloc: std.heap.FixedBufferAllocator,
+    mesh_dirty: bool,
+    cube_shader: sokol.gfx.Shader,
 
     fn init() Game {
         sokol.gfx.setup(.{ .environment = sokol.glue.environment(), .logger = .{ .func = sokol.log.func } });
@@ -38,18 +40,27 @@ const Game = struct {
         const gi = [_]u16{ 0, 1, 2, 0, 2, 3 };
         const sky = [4]f32{ 0.5, 0.7, 0.9, 1 };
 
-        var g = Game{ .pipe = gfx.Render.init(&gv, &gi, sky), .player = Player.init(), .world = World.init(), .vox = undefined, .alloc = std.heap.FixedBufferAllocator.init(&buf) };
+        const sh_desc = shader.cubeShaderDesc(sokol.gfx.queryBackend());
+        const sh = sokol.gfx.makeShader(sh_desc);
+        var g = Game{ .pipe = gfx.Render.init(&gv, &gi, sky), .player = Player.init(), .world = World.init(), .vox = undefined, .alloc = std.heap.FixedBufferAllocator.init(&buf), .mesh_dirty = false, .cube_shader = sh };
 
         const r = g.world.mesh(&verts, &indices, World.color);
         g.vox = gfx.Render.init(verts[0..r.verts], indices[0..r.indices], sky);
-        const sh = shader.cubeShaderDesc(sokol.gfx.queryBackend());
-        g.pipe.shader(sh);
-        g.vox.shader(sh);
+        g.pipe.shaderFromHandle(sh);
+        g.vox.shaderFromHandle(sh);
         return g;
     }
 
     fn tick(g: *Game) void {
-        g.player.tick(&g.world, @floatCast(sapp.frameDuration()));
+        const world_changed = g.player.tick(&g.world, @floatCast(sapp.frameDuration()));
+        if (world_changed) {
+            g.mesh_dirty = true;
+        }
+
+        if (g.mesh_dirty) {
+            g.regenerateMesh();
+            g.mesh_dirty = false;
+        }
     }
 
     fn draw(g: *Game) void {
@@ -64,10 +75,19 @@ const Game = struct {
         sokol.gfx.commit();
     }
 
+    fn regenerateMesh(g: *Game) void {
+        g.vox.deinit();
+        const r = g.world.mesh(&verts, &indices, World.color);
+        const sky = [4]f32{ 0.5, 0.7, 0.9, 1 };
+        g.vox = gfx.Render.init(verts[0..r.verts], indices[0..r.indices], sky);
+        g.vox.shaderFromHandle(g.cube_shader);
+    }
+
     fn deinit(g: *Game) void {
         g.pipe.deinit();
         g.vox.deinit();
         g.world.deinit();
+        if (g.cube_shader.id != 0) sokol.gfx.destroyShader(g.cube_shader);
         simgui.shutdown();
         sokol.gfx.shutdown();
     }

@@ -15,8 +15,14 @@ pub const Vec3 = struct {
     pub fn scale(v: Vec3, s: f32) Vec3 {
         return .{ .data = v.data * @as(@Vector(3, f32), @splat(s)) };
     }
+    pub fn sub(v: Vec3, o: Vec3) Vec3 {
+        return .{ .data = v.data - o.data };
+    }
     pub fn dot(v: Vec3, o: Vec3) f32 {
         return @reduce(.Add, v.data * o.data);
+    }
+    pub fn length(v: Vec3) f32 {
+        return @sqrt(v.dot(v));
     }
 };
 
