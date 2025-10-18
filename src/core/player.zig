@@ -165,6 +165,16 @@ pub const Player = struct {
             if (p.io.justPressed(.e)) {
                 p.block = p.block +% 1;
             }
+
+            // Grab block color with R key
+            if (p.io.justPressed(.r)) {
+                const look = Vec3.new(@sin(p.yaw) * @cos(p.pitch), -@sin(p.pitch), -@cos(p.yaw) * @cos(p.pitch));
+                if (w.raycast(p.pos, look, cfg.reach)) |hit| {
+                    const pos = [3]i32{ @intFromFloat(@floor(hit.data[0])), @intFromFloat(@floor(hit.data[1])), @intFromFloat(@floor(hit.data[2])) };
+                    const target_block = w.get(pos[0], pos[1], pos[2]);
+                    if (target_block != 0) p.block = target_block;
+                }
+            }
         }
         if (p.io.justPressed(.escape)) p.io.mouse.unlock();
         if (p.io.mouse.left and !p.io.mouse.locked()) p.io.mouse.lock();
