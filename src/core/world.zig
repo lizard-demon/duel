@@ -167,9 +167,7 @@ pub const World = struct {
             hit = true;
             p = p.add(v.scale(@max(0, c - 0.001)));
             const d = n.dot(v);
-            v.data[0] -= n.data[0] * d;
-            v.data[1] -= n.data[1] * d;
-            v.data[2] -= n.data[2] * d;
+            v = v.sub(n.scale(d));
             if (@sqrt(v.dot(v)) < 0.0001) break;
         }
         return .{ .pos = p, .vel = v, .hit = hit };

@@ -22,6 +22,8 @@ pub const Player = struct {
     block: world.Block,
     cool: f32,
 
+    const DEFAULT_BLOCK: world.Block = 227;
+
     const cfg = struct {
         const spawn = struct {
             const x = 58.0;
@@ -101,7 +103,7 @@ pub const Player = struct {
     }
 
     pub fn init() Player {
-        return .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .io = .{}, .block = 0b11100011, .cool = 0 };
+        return .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .io = .{}, .block = DEFAULT_BLOCK, .cool = 0 };
     }
 
     pub fn tick(p: *Player, w: *World, dt: f32) bool {
