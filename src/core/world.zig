@@ -75,6 +75,21 @@ pub const World = struct {
         };
         return w;
     }
+
+    pub fn save(w: *const World) void {
+        const file = std.fs.cwd().createFile("world.dat", .{}) catch return;
+        defer file.close();
+        _ = file.writeAll(std.mem.asBytes(&w.blocks)) catch {};
+    }
+
+    pub fn load() World {
+        const file = std.fs.cwd().openFile("world.dat", .{}) catch return World.init();
+        defer file.close();
+        var w = World{ .blocks = undefined };
+        _ = file.readAll(std.mem.asBytes(&w.blocks)) catch return World.init();
+        return w;
+    }
+
     pub fn get(w: *const World, x: i32, y: i32, z: i32) Block {
         if (x < 0 or x >= 64 or y < 0 or y >= 64 or z < 0 or z >= 64) return 0;
         return w.blocks[@intCast(x)][@intCast(y)][@intCast(z)];

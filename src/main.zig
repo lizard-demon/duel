@@ -33,7 +33,7 @@ const Game = struct {
 
         const sh_desc = shader.cubeShaderDesc(sokol.gfx.queryBackend());
         const sh = sokol.gfx.makeShader(sh_desc);
-        var g = Game{ .player = Player.init(), .world = World.init(), .vox = undefined, .mesh_dirty = false, .cube_shader = sh };
+        var g = Game{ .player = Player.init(), .world = World.load(), .vox = undefined, .mesh_dirty = false, .cube_shader = sh };
 
         const r = g.world.mesh(&verts, &indices, World.color);
         g.vox = gfx.Render.init(verts[0..r.verts], indices[0..r.indices], sky);
@@ -72,6 +72,7 @@ const Game = struct {
     }
 
     fn deinit(g: *Game) void {
+        g.world.save();
         g.vox.deinit();
         if (g.cube_shader.id != 0) sokol.gfx.destroyShader(g.cube_shader);
         simgui.shutdown();
