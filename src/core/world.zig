@@ -56,24 +56,13 @@ pub const World = struct {
 
     pub fn color(block: Block) [3]f32 {
         if (block == 0) return .{ 0, 0, 0 }; // air
+        if (block == 1) return .{ 0, 0, 0 }; // reserved black
+        if (block == 2) return .{ 1, 1, 1 }; // reserved white
 
-        const idx = block - 1; // 0-254 range
-
-        // Single black + full HSV coverage
-        if (idx == 0) return .{ 0, 0, 0 }; // Pure black for color 1
-
-        const adjusted_idx = idx - 1; // 0-253 range for remaining colors
-        const h_steps = 6;
-        const s_steps = 6;
-        const v_steps = 7;
-
-        const h_idx = adjusted_idx % h_steps;
-        const s_idx = (adjusted_idx / h_steps) % s_steps;
-        const v_idx = adjusted_idx / (h_steps * s_steps);
-
-        const hue = @as(f32, @floatFromInt(h_idx)) / @as(f32, h_steps) * 360.0;
-        const sat = @as(f32, @floatFromInt(s_idx)) / @as(f32, s_steps - 1);
-        const val = 0.2 + @as(f32, @floatFromInt(v_idx)) / @as(f32, v_steps - 1) * 0.8; // 0.2-1.0 (avoid more blacks)
+        // Bit-packed HSV mapping: 32 hues, 4 saturations, 2 values
+        const hue = @as(f32, @floatFromInt(block & 0x1F)) * 360.0 / 32.0; // 5 bits for hue (32 hues)
+        const sat = 0.25 + @as(f32, @floatFromInt((block >> 5) & 0x03)) * 0.25; // 2 bits for saturation (0.25, 0.5, 0.75, 1.0)
+        const val = 0.4 + @as(f32, @floatFromInt((block >> 7) & 0x01)) * 0.6; // 1 bit for value (0.4 or 1.0)
 
         return hsvToRgb(hue, sat, val);
     }
