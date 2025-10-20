@@ -1,4 +1,3 @@
-// Entire Player System
 const std = @import("std");
 const math = @import("../lib/math.zig");
 const io = @import("../lib/io.zig");
@@ -32,7 +31,7 @@ pub const Player = struct {
         return .{ .data = .{ cy, sy * sp, -sy * cp, 0, 0, cp, sp, 0, sy, -cy * sp, cy * cp, 0, -x * cy - z * sy, -x * sy * sp - y * cp + z * cy * sp, x * sy * cp - y * sp - z * cy * cp, 1 } };
     }
 
-    pub const collision = struct {
+    pub const bounds = struct {
         pub fn bbox(pos: Vec3, crouch: bool, crouch_height: f32, stand_height: f32, width: f32) Collision.bbox {
             const h: f32 = if (crouch) crouch_height else stand_height;
             const w: f32 = width;
@@ -105,14 +104,14 @@ pub const Player = struct {
 };
 
 pub const Input = struct {
-    pub const cfg = struct {
-        sensitivity: f32,
-        pitch_limit: f32,
-        stand_height: f32,
-        crouch_height: f32,
-        width: f32,
-        jump_power: f32,
-        reach: f32,
+    const cfg = struct {
+        const sensitivity = 0.002;
+        const pitch_limit = 1.57;
+        const stand_height = 1.8;
+        const crouch_height = 0.9;
+        const width = 0.4;
+        const jump_power = 8.0;
+        const reach = 10.0;
     };
 
     const handle = struct {
@@ -124,13 +123,13 @@ pub const Input = struct {
             Player.update.pos(p, config, dir, dt);
         }
 
-        pub fn crouch(p: *Player, world_map: *Map, stand_height: f32, crouch_height: f32, width: f32) void {
+        pub fn crouch(p: *Player, world_map: *Map) void {
             const wish = p.io.shift();
 
             if (p.crouch and !wish) {
-                const diff = (stand_height - crouch_height) / 2.0;
+                const diff = (cfg.stand_height - cfg.crouch_height) / 2.0;
                 const test_pos = Vec3.new(p.pos.data[0], p.pos.data[1] + diff, p.pos.data[2]);
-                const standing = Player.collision.standbox(test_pos, width, stand_height);
+                const standing = Player.bounds.standbox(test_pos, cfg.width, cfg.stand_height);
 
                 if (!Collision.checkStatic(world_map, standing)) {
                     p.pos.data[1] += diff;
@@ -141,25 +140,25 @@ pub const Input = struct {
             }
         }
 
-        pub fn jump(p: *Player, jump_power: f32) void {
+        pub fn jump(p: *Player) void {
             if (p.io.pressed(.space) and p.ground) {
-                p.vel.data[1] = jump_power;
+                p.vel.data[1] = cfg.jump_power;
                 p.ground = false;
             }
         }
 
-        pub fn camera(p: *Player, sensitivity: f32, pitch_limit: f32) void {
+        pub fn camera(p: *Player) void {
             if (!p.io.mouse.locked()) return;
 
-            p.yaw += p.io.mouse.dx * sensitivity;
-            p.pitch = @max(-pitch_limit, @min(pitch_limit, p.pitch + p.io.mouse.dy * sensitivity));
+            p.yaw += p.io.mouse.dx * cfg.sensitivity;
+            p.pitch = @max(-cfg.pitch_limit, @min(cfg.pitch_limit, p.pitch + p.io.mouse.dy * cfg.sensitivity));
         }
 
-        pub fn blocks(p: *Player, world_map: *Map, reach: f32, crouch_height: f32, stand_height: f32, width: f32) bool {
+        pub fn blocks(p: *Player, world_map: *Map) bool {
             if (!p.io.mouse.locked()) return false;
 
             const look = Player.lookdir(p.yaw, p.pitch);
-            const hit = Collision.raycast(world_map, p.pos, look, reach) orelse return false;
+            const hit = Collision.raycast(world_map, p.pos, look, cfg.reach) orelse return false;
             const pos = [3]i32{
                 @intFromFloat(@floor(hit.data[0])),
                 @intFromFloat(@floor(hit.data[1])),
@@ -181,8 +180,8 @@ pub const Input = struct {
                 };
                 const block_pos = Vec3.new(@floatFromInt(place_pos[0]), @floatFromInt(place_pos[1]), @floatFromInt(place_pos[2]));
 
-                const player_box = Player.collision.bbox(p.pos, p.crouch, crouch_height, stand_height, width);
-                const block_box = Player.collision.blockbox(block_pos);
+                const player_box = Player.bounds.bbox(p.pos, p.crouch, cfg.crouch_height, cfg.stand_height, cfg.width);
+                const block_box = Player.bounds.blockbox(block_pos);
 
                 if (!Collision.bbox.overlaps(player_box, block_box)) {
                     return world_map.set(place_pos[0], place_pos[1], place_pos[2], p.block);
@@ -211,12 +210,12 @@ pub const Input = struct {
         }
     };
 
-    pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32, config: cfg, game_cfg: anytype) bool {
+    pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32, game_cfg: anytype) bool {
         handle.movement(player_ptr, player_ptr.yaw, dt, game_cfg);
-        handle.crouch(player_ptr, world_map, config.stand_height, config.crouch_height, config.width);
-        handle.jump(player_ptr, config.jump_power);
-        handle.camera(player_ptr, config.sensitivity, config.pitch_limit);
-        const world_changed = handle.blocks(player_ptr, world_map, config.reach, config.crouch_height, config.stand_height, config.width);
+        handle.crouch(player_ptr, world_map);
+        handle.jump(player_ptr);
+        handle.camera(player_ptr);
+        const world_changed = handle.blocks(player_ptr, world_map);
         handle.color(player_ptr);
         handle.mouse(player_ptr);
         return world_changed;

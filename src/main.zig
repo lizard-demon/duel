@@ -16,7 +16,6 @@ const Mat4 = math.Mat4;
 const Vertex = math.Vertex;
 const Map = world.Map;
 const Player = player.Player;
-const AABB = player.AABB;
 
 var verts: [65536]Vertex = undefined;
 var indices: [98304]u16 = undefined;
@@ -75,16 +74,7 @@ pub const Game = struct {
 
     fn run(g: *Game) void {
         const dt = @as(f32, @floatCast(sapp.frameDuration()));
-        const input_cfg = player.Input.cfg{
-            .sensitivity = 0.002,
-            .pitch_limit = 1.57,
-            .stand_height = 1.8,
-            .crouch_height = 0.9,
-            .width = 0.4,
-            .jump_power = 8.0,
-            .reach = 10.0,
-        };
-        const world_changed = player.Input.tick(&g.player, &g.world, dt, input_cfg, Game.cfg);
+        const world_changed = player.Input.tick(&g.player, &g.world, dt, Game.cfg);
         Player.update.phys(&g.player, Game.cfg, &g.world, dt);
 
         frame: switch (world_changed) {
