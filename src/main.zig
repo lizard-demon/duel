@@ -64,8 +64,156 @@ const Game = struct {
             pub const power = 8.0;
         };
 
-        pub const reach = 5.0;
+        pub const reach = 10.0;
         pub const respawn_y = -1.0;
+    };
+
+    pub const input = struct {
+        pub const lib = struct {
+            pub fn lookdir(p: *const Player) Vec3 {
+                return Vec3.new(@sin(p.yaw) * @cos(p.pitch), -@sin(p.pitch), -@cos(p.yaw) * @cos(p.pitch));
+            }
+
+            pub fn bbox(p: *const Player) AABB {
+                const h: f32 = if (p.crouch) Game.cfg.size.crouch else Game.cfg.size.stand;
+                const w: f32 = Game.cfg.size.width;
+                return AABB{
+                    .min = p.pos.add(Vec3.new(-w, -h / 2.0, -w)),
+                    .max = p.pos.add(Vec3.new(w, h / 2.0, w)),
+                };
+            }
+
+            pub fn standbox(pos: Vec3) AABB {
+                const w = Game.cfg.size.width;
+                const h = Game.cfg.size.stand;
+                const box = AABB{
+                    .min = Vec3.new(-w, -h / 2.0, -w),
+                    .max = Vec3.new(w, h / 2.0, w),
+                };
+                return box.at(pos);
+            }
+
+            pub fn blockbox(pos: Vec3) AABB {
+                return AABB{
+                    .min = pos,
+                    .max = pos.add(Vec3.new(1, 1, 1)),
+                };
+            }
+        };
+
+        pub const handle = struct {
+            pub fn movement(g: *Game, dt: f32) void {
+                const p = &g.player;
+                const mv = p.io.vec2(.a, .d, .s, .w);
+                var dir = Vec3.zero();
+                if (mv.x != 0) dir = dir.add(Vec3.new(@cos(p.yaw), 0, @sin(p.yaw)).scale(mv.x));
+                if (mv.y != 0) dir = dir.add(Vec3.new(@sin(p.yaw), 0, -@cos(p.yaw)).scale(mv.y));
+                Player.update.pos(p, Game.cfg, dir, dt);
+            }
+
+            pub fn crouch(g: *Game) void {
+                const p = &g.player;
+                const wish = p.io.shift();
+
+                if (p.crouch and !wish) {
+                    const diff = (Game.cfg.size.stand - Game.cfg.size.crouch) / 2.0;
+                    const test_pos = Vec3.new(p.pos.data[0], p.pos.data[1] + diff, p.pos.data[2]);
+                    const standing = Game.input.lib.standbox(test_pos);
+
+                    if (!player.checkStaticCollision(&g.world, standing)) {
+                        p.pos.data[1] += diff;
+                        p.crouch = false;
+                    }
+                } else {
+                    p.crouch = wish;
+                }
+            }
+
+            pub fn jump(g: *Game) void {
+                const p = &g.player;
+                if (p.io.pressed(.space) and p.ground) {
+                    p.vel.data[1] = Game.cfg.jump.power;
+                    p.ground = false;
+                }
+            }
+
+            pub fn camera(g: *Game) void {
+                const p = &g.player;
+                if (!p.io.mouse.locked()) return;
+
+                p.yaw += p.io.mouse.dx * Game.cfg.input.sens;
+                p.pitch = @max(-Game.cfg.input.pitch_limit, @min(Game.cfg.input.pitch_limit, p.pitch + p.io.mouse.dy * Game.cfg.input.sens));
+            }
+
+            pub fn blocks(g: *Game) bool {
+                const p = &g.player;
+                if (!p.io.mouse.locked()) return false;
+
+                const look = Game.input.lib.lookdir(p);
+                const hit = player.raycast(&g.world, p.pos, look, Game.cfg.reach) orelse return false;
+                const pos = [3]i32{
+                    @intFromFloat(@floor(hit.data[0])),
+                    @intFromFloat(@floor(hit.data[1])),
+                    @intFromFloat(@floor(hit.data[2])),
+                };
+
+                // Break block
+                if (p.io.mouse.leftPressed()) {
+                    return g.world.set(pos[0], pos[1], pos[2], 0);
+                }
+
+                // Place block
+                if (p.io.mouse.rightPressed()) {
+                    const prev = hit.sub(look.scale(0.1));
+                    const place_pos = [3]i32{
+                        @intFromFloat(@floor(prev.data[0])),
+                        @intFromFloat(@floor(prev.data[1])),
+                        @intFromFloat(@floor(prev.data[2])),
+                    };
+                    const block_pos = Vec3.new(@floatFromInt(place_pos[0]), @floatFromInt(place_pos[1]), @floatFromInt(place_pos[2]));
+
+                    const player_box = Game.input.lib.bbox(p);
+                    const block_box = Game.input.lib.blockbox(block_pos);
+
+                    if (!AABB.overlaps(player_box, block_box)) {
+                        return g.world.set(place_pos[0], place_pos[1], place_pos[2], p.block);
+                    }
+                }
+
+                // Pick block color
+                if (p.io.justPressed(.r)) {
+                    const target = g.world.get(pos[0], pos[1], pos[2]);
+                    if (target != 0) p.block = target;
+                }
+
+                return false;
+            }
+
+            pub fn color(g: *Game) void {
+                const p = &g.player;
+                if (!p.io.mouse.locked()) return;
+
+                if (p.io.justPressed(.q)) p.block -%= 1;
+                if (p.io.justPressed(.e)) p.block +%= 1;
+            }
+
+            pub fn mouse(g: *Game) void {
+                const p = &g.player;
+                if (p.io.justPressed(.escape)) p.io.mouse.unlock();
+                if (p.io.mouse.left and !p.io.mouse.locked()) p.io.mouse.lock();
+            }
+        };
+
+        pub fn tick(g: *Game, dt: f32) bool {
+            Game.input.handle.movement(g, dt);
+            Game.input.handle.crouch(g);
+            Game.input.handle.jump(g);
+            Game.input.handle.camera(g);
+            const world_changed = Game.input.handle.blocks(g);
+            Game.input.handle.color(g);
+            Game.input.handle.mouse(g);
+            return world_changed;
+        }
     };
 
     fn init() Game {
@@ -84,7 +232,7 @@ const Game = struct {
 
     fn tick(g: *Game) void {
         const dt = @as(f32, @floatCast(sapp.frameDuration()));
-        const world_changed = g.input(dt);
+        const world_changed = Game.input.tick(g, dt);
         Player.update.phys(&g.player, Game.cfg, &g.world, dt);
 
         if (world_changed) {
@@ -113,95 +261,6 @@ const Game = struct {
         const r = world.Mesh.build(&g.world, &verts, &indices, world.color);
         g.vox = gfx.pipeline.init(verts[0..r.verts], indices[0..r.indices], sky);
         g.vox.shader(g.cube_shader);
-    }
-
-    fn input(g: *Game, dt: f32) bool {
-        var world_changed = false;
-        const p = &g.player;
-        const w = &g.world;
-
-        const mv = p.io.vec2(.a, .d, .s, .w);
-        var dir = Vec3.zero();
-        if (mv.x != 0) dir = dir.add(Vec3.new(@cos(p.yaw), 0, @sin(p.yaw)).scale(mv.x));
-        if (mv.y != 0) dir = dir.add(Vec3.new(@sin(p.yaw), 0, -@cos(p.yaw)).scale(mv.y));
-        Player.update.pos(p, Game.cfg, dir, dt);
-
-        const wish = p.io.shift();
-        if (p.crouch and !wish) {
-            // Calculate the height difference between crouching and standing
-            const diff: f32 = (Game.cfg.size.stand - Game.cfg.size.crouch) / 2.0;
-
-            // Calculate where the player would be positioned when standing
-            const test_pos = Vec3.new(p.pos.data[0], p.pos.data[1] + diff, p.pos.data[2]);
-
-            // Create the standing hitbox at the test position
-            const standing_box = AABB{ .min = Vec3.new(-Game.cfg.size.width, -Game.cfg.size.stand / 2.0, -Game.cfg.size.width), .max = Vec3.new(Game.cfg.size.width, Game.cfg.size.stand / 2.0, Game.cfg.size.width) };
-
-            // Check for static collision by testing the bounding box against world blocks
-            const player_aabb = standing_box.at(test_pos);
-            const collision = player.checkStaticCollision(w, player_aabb);
-
-            // Only uncrouch if there's no collision
-            if (!collision) {
-                p.pos.data[1] += diff;
-                p.crouch = false;
-            }
-            // If collision detected, remain crouched
-        } else {
-            p.crouch = wish;
-        }
-
-        if (p.io.pressed(.space) and p.ground) {
-            p.vel.data[1] = Game.cfg.jump.power;
-            p.ground = false;
-        }
-
-        if (p.io.mouse.locked()) {
-            p.yaw += p.io.mouse.dx * Game.cfg.input.sens;
-            p.pitch = @max(-Game.cfg.input.pitch_limit, @min(Game.cfg.input.pitch_limit, p.pitch + p.io.mouse.dy * Game.cfg.input.sens));
-
-            // Block interactions
-            const look = Vec3.new(@sin(p.yaw) * @cos(p.pitch), -@sin(p.pitch), -@cos(p.yaw) * @cos(p.pitch));
-            if (player.raycast(w, p.pos, look, Game.cfg.reach)) |hit| {
-                const pos = [3]i32{ @intFromFloat(@floor(hit.data[0])), @intFromFloat(@floor(hit.data[1])), @intFromFloat(@floor(hit.data[2])) };
-
-                if (p.io.mouse.leftPressed() and w.set(pos[0], pos[1], pos[2], 0)) {
-                    world_changed = true;
-                } else if (p.io.mouse.rightPressed()) {
-                    const prev = hit.sub(look.scale(0.1));
-                    const place_pos = [3]i32{ @intFromFloat(@floor(prev.data[0])), @intFromFloat(@floor(prev.data[1])), @intFromFloat(@floor(prev.data[2])) };
-                    const block_pos = Vec3.new(@floatFromInt(place_pos[0]), @floatFromInt(place_pos[1]), @floatFromInt(place_pos[2]));
-                    const h: f32 = if (p.crouch) Game.cfg.size.crouch else Game.cfg.size.stand;
-                    const player_box = AABB{ .min = p.pos.add(Vec3.new(-Game.cfg.size.width, -h / 2.0, -Game.cfg.size.width)), .max = p.pos.add(Vec3.new(Game.cfg.size.width, h / 2.0, Game.cfg.size.width)) };
-                    const block_box = AABB{ .min = block_pos, .max = block_pos.add(Vec3.new(1, 1, 1)) };
-                    const overlaps = AABB.overlaps(player_box, block_box);
-                    if (!overlaps and w.set(place_pos[0], place_pos[1], place_pos[2], p.block)) {
-                        world_changed = true;
-                    }
-                }
-            }
-
-            // Color selection with Q and E keys
-            if (p.io.justPressed(.q)) {
-                p.block = p.block -% 1;
-            }
-            if (p.io.justPressed(.e)) {
-                p.block = p.block +% 1;
-            }
-
-            // Grab block color with R key
-            if (p.io.justPressed(.r)) {
-                if (player.raycast(w, p.pos, look, Game.cfg.reach)) |hit| {
-                    const pos = [3]i32{ @intFromFloat(@floor(hit.data[0])), @intFromFloat(@floor(hit.data[1])), @intFromFloat(@floor(hit.data[2])) };
-                    const target_block = w.get(pos[0], pos[1], pos[2]);
-                    if (target_block != 0) p.block = target_block;
-                }
-            }
-        }
-        if (p.io.justPressed(.escape)) p.io.mouse.unlock();
-        if (p.io.mouse.left and !p.io.mouse.locked()) p.io.mouse.lock();
-
-        return world_changed;
     }
 
     fn deinit(g: *Game) void {
