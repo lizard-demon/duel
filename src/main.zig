@@ -9,7 +9,6 @@ const io = @import("lib/io.zig");
 const world = @import("core/world.zig");
 const gfx = @import("core/render.zig");
 const player = @import("core/player.zig");
-const physics = @import("core/physics.zig");
 const shader = @import("shaders/cube.glsl.zig");
 
 const Vec3 = math.Vec3;
@@ -17,7 +16,7 @@ const Mat4 = math.Mat4;
 const Vertex = math.Vertex;
 const World = world.World;
 const Player = player.Player;
-const AABB = physics.AABB;
+const AABB = player.AABB;
 
 var verts: [65536]Vertex = undefined;
 var indices: [98304]u16 = undefined;
@@ -140,7 +139,7 @@ const Game = struct {
 
             // Check for static collision by testing the bounding box against world blocks
             const player_aabb = standing_box.at(test_pos);
-            const collision = physics.checkStaticCollision(w, player_aabb);
+            const collision = player.checkStaticCollision(w, player_aabb);
 
             // Only uncrouch if there's no collision
             if (!collision) {
@@ -163,7 +162,7 @@ const Game = struct {
 
             // Block interactions
             const look = Vec3.new(@sin(p.yaw) * @cos(p.pitch), -@sin(p.pitch), -@cos(p.yaw) * @cos(p.pitch));
-            if (physics.raycast(w, p.pos, look, Game.cfg.reach)) |hit| {
+            if (player.raycast(w, p.pos, look, Game.cfg.reach)) |hit| {
                 const pos = [3]i32{ @intFromFloat(@floor(hit.data[0])), @intFromFloat(@floor(hit.data[1])), @intFromFloat(@floor(hit.data[2])) };
 
                 if (p.io.mouse.leftPressed() and w.set(pos[0], pos[1], pos[2], 0)) {
@@ -192,7 +191,7 @@ const Game = struct {
 
             // Grab block color with R key
             if (p.io.justPressed(.r)) {
-                if (physics.raycast(w, p.pos, look, Game.cfg.reach)) |hit| {
+                if (player.raycast(w, p.pos, look, Game.cfg.reach)) |hit| {
                     const pos = [3]i32{ @intFromFloat(@floor(hit.data[0])), @intFromFloat(@floor(hit.data[1])), @intFromFloat(@floor(hit.data[2])) };
                     const target_block = w.get(pos[0], pos[1], pos[2]);
                     if (target_block != 0) p.block = target_block;
