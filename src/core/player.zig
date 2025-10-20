@@ -5,7 +5,7 @@ const world = @import("world.zig");
 
 const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
-const World = world.World;
+const Map = world.Map;
 
 pub const AABB = struct {
     min: Vec3,
@@ -182,7 +182,7 @@ pub const Player = struct {
             if (p.ground) update.friction(p, cfg, dt);
         }
 
-        pub fn phys(p: *Player, cfg: anytype, w: *const World, dt: f32) void {
+        pub fn phys(p: *Player, cfg: anytype, w: *const Map, dt: f32) void {
             p.vel.data[1] -= cfg.phys.gravity * dt;
             const h: f32 = if (p.crouch) cfg.size.crouch else cfg.size.stand;
             const box = AABB{ .min = Vec3.new(-cfg.size.width, -h / 2.0, -cfg.size.width), .max = Vec3.new(cfg.size.width, h / 2.0, cfg.size.width) };

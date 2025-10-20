@@ -14,7 +14,7 @@ const shader = @import("shaders/cube.glsl.zig");
 const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
 const Vertex = math.Vertex;
-const World = world.World;
+const Map = world.Map;
 const Player = player.Player;
 const AABB = player.AABB;
 
@@ -25,7 +25,7 @@ const sky = [4]f32{ 0.5, 0.7, 0.9, 1 };
 const Game = struct {
     vox: gfx.pipeline,
     player: Player,
-    world: World,
+    world: Map,
     mesh_dirty: bool,
     cube_shader: sokol.gfx.Shader,
 
@@ -74,9 +74,9 @@ const Game = struct {
 
         const sh_desc = shader.cubeShaderDesc(sokol.gfx.queryBackend());
         const sh = sokol.gfx.makeShader(sh_desc);
-        var g = Game{ .player = Player.spawn(Game.cfg.spawn.x, Game.cfg.spawn.y, Game.cfg.spawn.z), .world = World.load(), .vox = undefined, .mesh_dirty = false, .cube_shader = sh };
+        var g = Game{ .player = Player.spawn(Game.cfg.spawn.x, Game.cfg.spawn.y, Game.cfg.spawn.z), .world = Map.load(), .vox = undefined, .mesh_dirty = false, .cube_shader = sh };
 
-        const r = g.world.mesh(&verts, &indices, World.color);
+        const r = world.Mesh.build(&g.world, &verts, &indices, world.color);
         g.vox = gfx.pipeline.init(verts[0..r.verts], indices[0..r.indices], sky);
         g.vox.shader(sh);
         return g;
@@ -110,7 +110,7 @@ const Game = struct {
 
     fn mesh(g: *Game) void {
         g.vox.deinit();
-        const r = g.world.mesh(&verts, &indices, World.color);
+        const r = world.Mesh.build(&g.world, &verts, &indices, world.color);
         g.vox = gfx.pipeline.init(verts[0..r.verts], indices[0..r.indices], sky);
         g.vox.shader(g.cube_shader);
     }

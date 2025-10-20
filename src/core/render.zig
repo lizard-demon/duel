@@ -78,7 +78,7 @@ pub const UI = struct {
             const hud_flags = ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar | ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoInputs;
             if (ig.igBegin("GameHUD", null, hud_flags)) {
                 const dl = ig.igGetWindowDrawList();
-                const block_color = world.World.color(block);
+                const block_color = world.color(block);
 
                 // Draw elegant color swatch with subtle border
                 const swatch_size = 24.0;
