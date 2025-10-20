@@ -70,8 +70,14 @@ pub const Player = struct {
     pub fn tick(p: *Player, w: *World, dt: f32) bool {
         p.cool = @max(0, p.cool - dt);
         const changed = p.input(w, dt);
-        p.updatePhysics(w, dt);
+        Player.update.phys(p, w, dt);
         return changed;
+    }
+
+    pub fn view(p: *Player) Mat4 {
+        const cy, const sy, const cp, const sp = .{ @cos(p.yaw), @sin(p.yaw), @cos(p.pitch), @sin(p.pitch) };
+        const x, const y, const z = .{ p.pos.data[0], p.pos.data[1], p.pos.data[2] };
+        return .{ .data = .{ cy, sy * sp, -sy * cp, 0, 0, cp, sp, 0, sy, -cy * sp, cy * cp, 0, -x * cy - z * sy, -x * sy * sp - y * cp + z * cy * sp, x * sy * cp - y * sp - z * cy * cp, 1 } };
     }
 
     fn input(p: *Player, w: *World, dt: f32) bool {
@@ -80,7 +86,7 @@ pub const Player = struct {
         var dir = Vec3.zero();
         if (mv.x != 0) dir = dir.add(Vec3.new(@cos(p.yaw), 0, @sin(p.yaw)).scale(mv.x));
         if (mv.y != 0) dir = dir.add(Vec3.new(@sin(p.yaw), 0, -@cos(p.yaw)).scale(mv.y));
-        p.move(dir, dt);
+        Player.update.pos(p, dir, dt);
 
         const wish = p.io.shift();
         if (p.crouch and !wish) {
@@ -165,48 +171,44 @@ pub const Player = struct {
         return world_changed;
     }
 
-    fn move(p: *Player, dir: Vec3, dt: f32) void {
-        const len = @sqrt(dir.data[0] * dir.data[0] + dir.data[2] * dir.data[2]);
-        if (len < cfg.move.min_len) return if (p.ground) p.friction(dt);
-        const wish = Vec3.new(dir.data[0] / len, 0, dir.data[2] / len);
-        const base_speed: f32 = if (p.crouch) cfg.move.crouch_speed else cfg.move.speed;
-        const max = if (p.ground) base_speed * len else @min(base_speed * len, cfg.move.air_cap);
-        const add = @max(0, max - p.vel.dot(wish));
-        if (add > 0) p.vel = p.vel.add(wish.scale(@min(cfg.move.accel * dt, add)));
-        if (p.ground) p.friction(dt);
-    }
-
-    fn updatePhysics(p: *Player, w: *const World, dt: f32) void {
-        p.vel.data[1] -= cfg.phys.gravity * dt;
-        const h: f32 = if (p.crouch) cfg.size.crouch else cfg.size.stand;
-        const box = AABB{ .min = Vec3.new(-cfg.size.width, -h / 2.0, -cfg.size.width), .max = Vec3.new(cfg.size.width, h / 2.0, cfg.size.width) };
-        const r = physics.sweep(w, p.pos, box, p.vel.scale(dt), cfg.phys.steps);
-        p.pos = r.pos;
-        p.vel = r.vel.scale(1 / dt);
-        p.ground = r.hit and @abs(r.vel.data[1]) < cfg.phys.ground_thresh;
-
-        if (p.pos.data[1] < cfg.respawn_y) p.respawn();
-    }
-
-    fn friction(p: *Player, dt: f32) void {
-        const s = @sqrt(p.vel.data[0] * p.vel.data[0] + p.vel.data[2] * p.vel.data[2]);
-        if (s < cfg.friction.min_speed) {
-            p.vel.data[0] = 0;
-            p.vel.data[2] = 0;
-            return;
+    const update = struct {
+        fn pos(p: *Player, dir: Vec3, dt: f32) void {
+            const len = @sqrt(dir.data[0] * dir.data[0] + dir.data[2] * dir.data[2]);
+            if (len < cfg.move.min_len) return if (p.ground) update.friction(p, dt);
+            const wish = Vec3.new(dir.data[0] / len, 0, dir.data[2] / len);
+            const base_speed: f32 = if (p.crouch) cfg.move.crouch_speed else cfg.move.speed;
+            const max = if (p.ground) base_speed * len else @min(base_speed * len, cfg.move.air_cap);
+            const add = @max(0, max - p.vel.dot(wish));
+            if (add > 0) p.vel = p.vel.add(wish.scale(@min(cfg.move.accel * dt, add)));
+            if (p.ground) update.friction(p, dt);
         }
-        const f = @max(0, s - @max(s, cfg.friction.min_speed) * cfg.friction.factor * dt) / s;
-        p.vel.data[0] *= f;
-        p.vel.data[2] *= f;
-    }
+
+        fn phys(p: *Player, w: *const World, dt: f32) void {
+            p.vel.data[1] -= cfg.phys.gravity * dt;
+            const h: f32 = if (p.crouch) cfg.size.crouch else cfg.size.stand;
+            const box = AABB{ .min = Vec3.new(-cfg.size.width, -h / 2.0, -cfg.size.width), .max = Vec3.new(cfg.size.width, h / 2.0, cfg.size.width) };
+            const r = physics.sweep(w, p.pos, box, p.vel.scale(dt), cfg.phys.steps);
+            p.pos = r.pos;
+            p.vel = r.vel.scale(1 / dt);
+            p.ground = r.hit and @abs(r.vel.data[1]) < cfg.phys.ground_thresh;
+
+            if (p.pos.data[1] < cfg.respawn_y) p.respawn();
+        }
+
+        fn friction(p: *Player, dt: f32) void {
+            const s = @sqrt(p.vel.data[0] * p.vel.data[0] + p.vel.data[2] * p.vel.data[2]);
+            if (s < cfg.friction.min_speed) {
+                p.vel.data[0] = 0;
+                p.vel.data[2] = 0;
+                return;
+            }
+            const f = @max(0, s - @max(s, cfg.friction.min_speed) * cfg.friction.factor * dt) / s;
+            p.vel.data[0] *= f;
+            p.vel.data[2] *= f;
+        }
+    };
 
     fn respawn(p: *Player) void {
         p.* = .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .io = p.io, .block = p.block, .cool = 0 };
-    }
-
-    pub fn view(p: *Player) Mat4 {
-        const cy, const sy, const cp, const sp = .{ @cos(p.yaw), @sin(p.yaw), @cos(p.pitch), @sin(p.pitch) };
-        const x, const y, const z = .{ p.pos.data[0], p.pos.data[1], p.pos.data[2] };
-        return .{ .data = .{ cy, sy * sp, -sy * cp, 0, 0, cp, sp, 0, sy, -cy * sp, cy * cp, 0, -x * cy - z * sy, -x * sy * sp - y * cp + z * cy * sp, x * sy * cp - y * sp - z * cy * cp, 1 } };
     }
 };
