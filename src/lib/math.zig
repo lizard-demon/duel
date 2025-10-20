@@ -41,6 +41,8 @@ pub const Mat4 = struct {
     }
 };
 
+pub const Vertex = extern struct { pos: [3]f32, col: [4]f32 };
+
 pub fn perspective(fov: f32, asp: f32, n: f32, f: f32) Mat4 {
     const t = @tan(fov * std.math.pi / 360) * n;
     const r = t * asp;

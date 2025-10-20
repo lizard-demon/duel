@@ -1,7 +1,7 @@
 const std = @import("std");
 const math = @import("../lib/math.zig");
-const gfx = @import("render.zig");
 const Vec3 = math.Vec3;
+const Vertex = math.Vertex;
 
 pub const Block = u8;
 
@@ -177,7 +177,7 @@ pub const World = struct {
         return .{ .pos = p, .vel = v, .hit = hit };
     }
 
-    pub fn mesh(w: *const World, verts: []gfx.Vertex, indices: []u16, comptime colors: fn (Block) [3]f32) struct { verts: usize, indices: usize } {
+    pub fn mesh(w: *const World, verts: []Vertex, indices: []u16, comptime colors: fn (Block) [3]f32) struct { verts: usize, indices: usize } {
         var vi: usize = 0;
         var ii: usize = 0;
         const shades = [_]f32{ 0.8, 0.8, 1.0, 0.8, 0.8, 0.8 };

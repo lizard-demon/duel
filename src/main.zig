@@ -13,15 +13,16 @@ const shader = @import("shaders/cube.glsl.zig");
 
 const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
+const Vertex = math.Vertex;
 const World = world.World;
 const Player = player.Player;
 
-var verts: [65536]gfx.Vertex = undefined;
+var verts: [65536]Vertex = undefined;
 var indices: [98304]u16 = undefined;
 const sky = [4]f32{ 0.5, 0.7, 0.9, 1 };
 
 const Game = struct {
-    vox: gfx.Render,
+    vox: gfx.pipeline,
     player: Player,
     world: World,
     mesh_dirty: bool,
@@ -36,8 +37,8 @@ const Game = struct {
         var g = Game{ .player = Player.init(), .world = World.load(), .vox = undefined, .mesh_dirty = false, .cube_shader = sh };
 
         const r = g.world.mesh(&verts, &indices, World.color);
-        g.vox = gfx.Render.init(verts[0..r.verts], indices[0..r.indices], sky);
-        g.vox.shaderFromHandle(sh);
+        g.vox = gfx.pipeline.init(verts[0..r.verts], indices[0..r.indices], sky);
+        g.vox.shader(sh);
         return g;
     }
 
@@ -48,14 +49,14 @@ const Game = struct {
         }
 
         if (g.mesh_dirty) {
-            g.regenerateMesh();
+            g.mesh();
             g.mesh_dirty = false;
         }
     }
 
     fn draw(g: *Game) void {
         simgui.newFrame(.{ .width = sapp.width(), .height = sapp.height(), .delta_time = sapp.frameDuration(), .dpi_scale = sapp.dpiScale() });
-        g.player.drawUI();
+        gfx.UI.render(g.player.block);
         const mvp = Mat4.mul(math.perspective(90, sapp.widthf() / sapp.heightf(), 0.1, 1000), g.player.view());
         sokol.gfx.beginPass(.{ .action = g.vox.pass, .swapchain = sokol.glue.swapchain() });
         g.vox.draw(mvp);
@@ -64,11 +65,11 @@ const Game = struct {
         sokol.gfx.commit();
     }
 
-    fn regenerateMesh(g: *Game) void {
+    fn mesh(g: *Game) void {
         g.vox.deinit();
         const r = g.world.mesh(&verts, &indices, World.color);
-        g.vox = gfx.Render.init(verts[0..r.verts], indices[0..r.indices], sky);
-        g.vox.shaderFromHandle(g.cube_shader);
+        g.vox = gfx.pipeline.init(verts[0..r.verts], indices[0..r.indices], sky);
+        g.vox.shader(g.cube_shader);
     }
 
     fn deinit(g: *Game) void {

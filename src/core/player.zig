@@ -1,7 +1,4 @@
 const std = @import("std");
-const sokol = @import("sokol");
-const sapp = sokol.app;
-const ig = @import("cimgui");
 const math = @import("../lib/math.zig");
 const io = @import("../lib/io.zig");
 const world = @import("world.zig");
@@ -29,15 +26,6 @@ pub const Player = struct {
             const x = 58.0;
             const y = 3.0;
             const z = 58.0;
-        };
-        const ui = struct {
-            const crosshair_size = 8.0;
-            const crosshair_color = [3]f32{ 1.0, 1.0, 1.0 };
-            const crosshair_alpha = 0.8;
-            const hud_x = 16.0;
-            const hud_y = 16.0;
-            const hud_w = 120.0;
-            const hud_h = 70.0;
         };
         const input = struct {
             const sens = 0.002;
@@ -72,56 +60,6 @@ pub const Player = struct {
         const block_cool = 0.15;
         const respawn_y = -1.0;
     };
-
-    pub fn drawUI(p: *const Player) void {
-        const w, const h = .{ sapp.widthf(), sapp.heightf() };
-
-        // Simple crosshair
-        ig.igSetNextWindowPos(.{ .x = 0, .y = 0 }, ig.ImGuiCond_Always);
-        ig.igSetNextWindowSize(.{ .x = w, .y = h }, ig.ImGuiCond_Always);
-        const flags = ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar | ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoInputs;
-        if (ig.igBegin("Crosshair", null, flags)) {
-            const dl = ig.igGetWindowDrawList();
-            const cx, const cy = .{ w * 0.5, h * 0.5 };
-            const size = cfg.ui.crosshair_size;
-            const col = ig.igColorConvertFloat4ToU32(.{ .x = cfg.ui.crosshair_color[0], .y = cfg.ui.crosshair_color[1], .z = cfg.ui.crosshair_color[2], .w = cfg.ui.crosshair_alpha });
-            ig.ImDrawList_AddLine(dl, .{ .x = cx - size, .y = cy }, .{ .x = cx + size, .y = cy }, col);
-            ig.ImDrawList_AddLine(dl, .{ .x = cx, .y = cy - size }, .{ .x = cx, .y = cy + size }, col);
-        }
-        ig.igEnd();
-
-        // Game HUD
-        ig.igSetNextWindowPos(.{ .x = cfg.ui.hud_x, .y = cfg.ui.hud_y }, ig.ImGuiCond_Always);
-        ig.igSetNextWindowSize(.{ .x = cfg.ui.hud_w, .y = cfg.ui.hud_h }, ig.ImGuiCond_Always);
-        const hud_flags = ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar | ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoInputs;
-        if (ig.igBegin("GameHUD", null, hud_flags)) {
-            const dl = ig.igGetWindowDrawList();
-            const block_color = world.World.color(p.block);
-
-            // Draw elegant color swatch with subtle border
-            const swatch_size = 24.0;
-            const swatch_x = cfg.ui.hud_x + 8;
-            const swatch_y = cfg.ui.hud_y + 8;
-            const color_u32 = ig.igColorConvertFloat4ToU32(.{ .x = block_color[0], .y = block_color[1], .z = block_color[2], .w = 1.0 });
-            const border_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 0.3 });
-
-            // Color swatch
-            ig.ImDrawList_AddRectFilled(dl, .{ .x = swatch_x, .y = swatch_y }, .{ .x = swatch_x + swatch_size, .y = swatch_y + swatch_size }, color_u32);
-            ig.ImDrawList_AddRect(dl, .{ .x = swatch_x, .y = swatch_y }, .{ .x = swatch_x + swatch_size, .y = swatch_y + swatch_size }, border_color);
-
-            // Block ID text below the color swatch
-            const text_x = swatch_x;
-            const text_y = swatch_y + swatch_size + 6;
-            const text_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 0.9 });
-            ig.ImDrawList_AddText(dl, .{ .x = text_x, .y = text_y }, text_color, "Block");
-
-            const id_color = ig.igColorConvertFloat4ToU32(.{ .x = 0.8, .y = 0.8, .z = 0.8, .w = 0.7 });
-            var buf: [16]u8 = undefined;
-            const id_str = std.fmt.bufPrintZ(&buf, "#{d}", .{p.block}) catch "###";
-            ig.ImDrawList_AddText(dl, .{ .x = text_x, .y = text_y + 12 }, id_color, id_str.ptr);
-        }
-        ig.igEnd();
-    }
 
     pub fn init() Player {
         return .{ .pos = Vec3.new(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .io = .{}, .block = DEFAULT_BLOCK, .cool = 0 };
