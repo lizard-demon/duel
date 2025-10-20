@@ -47,15 +47,15 @@ pub const Player = struct {
         const respawn_y = -1.0;
     };
 
-    pub fn spawn(x: f32, y: f32, z: f32) Player {
+    pub inline fn spawn(x: f32, y: f32, z: f32) Player {
         return .{ .pos = Vec3.new(x, y, z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .io = .{}, .block = 2 };
     }
 
-    pub fn init() Player {
+    pub inline fn init() Player {
         return spawn(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z);
     }
 
-    pub fn lookdir(yaw: f32, pitch: f32) Vec3 {
+    pub inline fn lookdir(yaw: f32, pitch: f32) Vec3 {
         return Vec3.new(@sin(yaw) * @cos(pitch), -@sin(pitch), -@cos(yaw) * @cos(pitch));
     }
 
@@ -66,7 +66,7 @@ pub const Player = struct {
     }
 
     pub const bounds = struct {
-        pub fn bbox(pos: Vec3, crouch: bool, crouch_height: f32, stand_height: f32, width: f32) Collision.bbox {
+        pub inline fn bbox(pos: Vec3, crouch: bool, crouch_height: f32, stand_height: f32, width: f32) Collision.bbox {
             const h: f32 = if (crouch) crouch_height else stand_height;
             const w: f32 = width;
             return Collision.bbox{
@@ -75,7 +75,7 @@ pub const Player = struct {
             };
         }
 
-        pub fn standbox(pos: Vec3, width: f32, height: f32) Collision.bbox {
+        pub inline fn standbox(pos: Vec3, width: f32, height: f32) Collision.bbox {
             const box = Collision.bbox{
                 .min = Vec3.new(-width, -height / 2.0, -width),
                 .max = Vec3.new(width, height / 2.0, width),
@@ -83,7 +83,7 @@ pub const Player = struct {
             return box.at(pos);
         }
 
-        pub fn blockbox(pos: Vec3) Collision.bbox {
+        pub inline fn blockbox(pos: Vec3) Collision.bbox {
             return Collision.bbox{
                 .min = pos,
                 .max = pos.add(Vec3.new(1, 1, 1)),
@@ -174,14 +174,14 @@ pub const Input = struct {
             }
         }
 
-        pub fn jump(p: *Player) void {
+        pub inline fn jump(p: *Player) void {
             if (p.io.pressed(.space) and p.ground) {
                 p.vel.data[1] = cfg.jump_power;
                 p.ground = false;
             }
         }
 
-        pub fn camera(p: *Player) void {
+        pub inline fn camera(p: *Player) void {
             if (!p.io.mouse.locked()) return;
 
             p.yaw += p.io.mouse.dx * cfg.sensitivity;
@@ -231,14 +231,14 @@ pub const Input = struct {
             return false;
         }
 
-        pub fn color(p: *Player) void {
+        pub inline fn color(p: *Player) void {
             if (!p.io.mouse.locked()) return;
 
             if (p.io.justPressed(.q)) p.block -%= 1;
             if (p.io.justPressed(.e)) p.block +%= 1;
         }
 
-        pub fn mouse(p: *Player) void {
+        pub inline fn mouse(p: *Player) void {
             if (p.io.justPressed(.escape)) p.io.mouse.unlock();
             if (p.io.mouse.left and !p.io.mouse.locked()) p.io.mouse.lock();
         }
@@ -261,7 +261,7 @@ pub const Collision = struct {
         min: Vec3,
         max: Vec3,
 
-        pub fn at(b: bbox, p: Vec3) bbox {
+        pub inline fn at(b: bbox, p: Vec3) bbox {
             return .{ .min = p.add(b.min), .max = p.add(b.max) };
         }
 
@@ -289,13 +289,13 @@ pub const Collision = struct {
             return .{ .t = enter, .n = n };
         }
 
-        fn axis(min1: f32, max1: f32, min2: f32, max2: f32, inv: f32) struct { enter: f32, exit: f32 } {
+        inline fn axis(min1: f32, max1: f32, min2: f32, max2: f32, inv: f32) struct { enter: f32, exit: f32 } {
             const t1 = (min2 - max1) * inv;
             const t2 = (max2 - min1) * inv;
             return .{ .enter = @min(t1, t2), .exit = @max(t1, t2) };
         }
 
-        pub fn overlaps(a: bbox, b: bbox) bool {
+        pub inline fn overlaps(a: bbox, b: bbox) bool {
             return a.min.data[0] < b.max.data[0] and a.max.data[0] > b.min.data[0] and
                 a.min.data[1] < b.max.data[1] and a.max.data[1] > b.min.data[1] and
                 a.min.data[2] < b.max.data[2] and a.max.data[2] > b.min.data[2];

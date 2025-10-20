@@ -30,7 +30,7 @@ pub const pipeline = struct {
         layout.attrs[1].format = .FLOAT4;
         r.pipe = sg.makePipeline(.{ .shader = sh, .layout = layout, .index_type = .UINT16, .depth = .{ .compare = .LESS_EQUAL, .write_enabled = true }, .cull_mode = .BACK });
     }
-    pub fn draw(r: pipeline, mvp: Mat4) void {
+    pub inline fn draw(r: pipeline, mvp: Mat4) void {
         sg.applyPipeline(r.pipe);
         sg.applyBindings(r.bind);
         sg.applyUniforms(0, sg.asRange(&mvp));
@@ -106,7 +106,7 @@ pub const UI = struct {
         }
     };
 
-    pub fn render(block: world.Block) void {
+    pub inline fn render(block: world.Block) void {
         draw.crosshair();
         draw.hud(block);
     }

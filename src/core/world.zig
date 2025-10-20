@@ -5,7 +5,7 @@ const Vertex = math.Vertex;
 
 pub const Block = u8;
 
-fn hsvToRgb(h: f32, s: f32, v: f32) [3]f32 {
+inline fn hsvToRgb(h: f32, s: f32, v: f32) [3]f32 {
     const c = v * s;
     const x = c * (1.0 - @abs(@mod(h / 60.0, 2.0) - 1.0));
     const m = v - c;
@@ -55,12 +55,12 @@ pub const Map = struct {
         return w;
     }
 
-    pub fn get(w: *const Map, x: i32, y: i32, z: i32) Block {
+    pub inline fn get(w: *const Map, x: i32, y: i32, z: i32) Block {
         if (x < 0 or x >= 64 or y < 0 or y >= 64 or z < 0 or z >= 64) return 0;
         return w.blocks[@intCast(x)][@intCast(y)][@intCast(z)];
     }
 
-    pub fn set(w: *Map, x: i32, y: i32, z: i32, block: Block) bool {
+    pub inline fn set(w: *Map, x: i32, y: i32, z: i32, block: Block) bool {
         if (x < 0 or x >= 64 or y < 0 or y >= 64 or z < 0 or z >= 64) return false;
         const old_block = w.blocks[@intCast(x)][@intCast(y)][@intCast(z)];
         if (old_block == block) return false;
@@ -179,7 +179,7 @@ pub const Mesh = struct {
         return .{ .width = width, .height = height };
     }
 
-    fn clearMaskArea(mask: *[64 * 64]FaceInfo, start_i: usize, start_j: usize, width: usize, height: usize) void {
+    inline fn clearMaskArea(mask: *[64 * 64]FaceInfo, start_i: usize, start_j: usize, width: usize, height: usize) void {
         for (0..height) |h| {
             for (0..width) |w_idx| {
                 mask[(start_j + h) * 64 + start_i + w_idx] = .{ .block = 0, .is_back = false };
@@ -239,7 +239,7 @@ pub const Mesh = struct {
         return quad;
     }
 
-    fn addQuadVertices(verts: []Vertex, vi: *usize, quad: [4][3]f32, fcol: [4]f32, is_back: bool) void {
+    inline fn addQuadVertices(verts: []Vertex, vi: *usize, quad: [4][3]f32, fcol: [4]f32, is_back: bool) void {
         if (is_back) {
             verts[vi.*] = .{ .pos = quad[0], .col = fcol };
             verts[vi.* + 1] = .{ .pos = quad[3], .col = fcol };
@@ -254,7 +254,7 @@ pub const Mesh = struct {
         vi.* += 4;
     }
 
-    fn addQuadIndices(indices: []u16, ii: *usize, base: u16) void {
+    inline fn addQuadIndices(indices: []u16, ii: *usize, base: u16) void {
         for ([_]u16{ 0, 1, 2, 0, 2, 3 }) |idx| {
             indices[ii.*] = base + idx;
             ii.* += 1;
