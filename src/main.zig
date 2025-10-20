@@ -27,44 +27,13 @@ pub const Game = struct {
     world: Map,
     cube_shader: sokol.gfx.Shader,
 
-    pub const cfg = struct {
-        pub const spawn = struct {
-            pub const x = 58.0;
-            pub const y = 3.0;
-            pub const z = 58.0;
-        };
-        pub const size = struct {
-            pub const stand = 1.8;
-            pub const crouch = 0.9;
-            pub const width = 0.4;
-        };
-        pub const move = struct {
-            pub const speed = 6.0;
-            pub const crouch_speed = speed / 2.0;
-            pub const air_cap = 0.7;
-            pub const accel = 70.0;
-            pub const min_len = 0.001;
-        };
-        pub const phys = struct {
-            pub const gravity = 20.0;
-            pub const steps = 3;
-            pub const ground_thresh = 0.01;
-        };
-        pub const friction = struct {
-            pub const min_speed = 0.1;
-            pub const factor = 4.0;
-        };
-
-        pub const respawn_y = -1.0;
-    };
-
     fn init() Game {
         sokol.gfx.setup(.{ .environment = sokol.glue.environment(), .logger = .{ .func = sokol.log.func } });
         simgui.setup(.{ .logger = .{ .func = sokol.log.func } });
 
         const sh_desc = shader.cubeShaderDesc(sokol.gfx.queryBackend());
         const sh = sokol.gfx.makeShader(sh_desc);
-        var g = Game{ .player = Player.spawn(Game.cfg.spawn.x, Game.cfg.spawn.y, Game.cfg.spawn.z), .world = Map.load(), .vox = undefined, .cube_shader = sh };
+        var g = Game{ .player = Player.init(), .world = Map.load(), .vox = undefined, .cube_shader = sh };
 
         const r = world.Mesh.build(&g.world, &verts, &indices, world.color);
         g.vox = gfx.pipeline.init(verts[0..r.verts], indices[0..r.indices], sky);
@@ -74,8 +43,8 @@ pub const Game = struct {
 
     fn run(g: *Game) void {
         const dt = @as(f32, @floatCast(sapp.frameDuration()));
-        const world_changed = player.Input.tick(&g.player, &g.world, dt, Game.cfg);
-        Player.update.phys(&g.player, Game.cfg, &g.world, dt);
+        const world_changed = player.Input.tick(&g.player, &g.world, dt);
+        Player.update.phys(&g.player, &g.world, dt);
 
         frame: switch (world_changed) {
             true => {

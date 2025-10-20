@@ -17,8 +17,42 @@ pub const Player = struct {
     io: io.IO,
     block: world.Block,
 
+    const cfg = struct {
+        const spawn = struct {
+            const x = 58.0;
+            const y = 3.0;
+            const z = 58.0;
+        };
+        const size = struct {
+            const stand = 1.8;
+            const crouch = 0.9;
+            const width = 0.4;
+        };
+        const move = struct {
+            const speed = 6.0;
+            const crouch_speed = speed / 2.0;
+            const air_cap = 0.7;
+            const accel = 70.0;
+            const min_len = 0.001;
+        };
+        const phys = struct {
+            const gravity = 20.0;
+            const steps = 3;
+            const ground_thresh = 0.01;
+        };
+        const friction = struct {
+            const min_speed = 0.1;
+            const factor = 4.0;
+        };
+        const respawn_y = -1.0;
+    };
+
     pub fn spawn(x: f32, y: f32, z: f32) Player {
         return .{ .pos = Vec3.new(x, y, z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .io = .{}, .block = 2 };
+    }
+
+    pub fn init() Player {
+        return spawn(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z);
     }
 
     pub fn lookdir(yaw: f32, pitch: f32) Vec3 {
@@ -58,18 +92,18 @@ pub const Player = struct {
     };
 
     pub const update = struct {
-        pub fn pos(p: *Player, cfg: anytype, dir: Vec3, dt: f32) void {
+        pub fn pos(p: *Player, dir: Vec3, dt: f32) void {
             const len = @sqrt(dir.data[0] * dir.data[0] + dir.data[2] * dir.data[2]);
-            if (len < cfg.move.min_len) return if (p.ground) update.friction(p, cfg, dt);
+            if (len < cfg.move.min_len) return if (p.ground) update.friction(p, dt);
             const wish = Vec3.new(dir.data[0] / len, 0, dir.data[2] / len);
             const base_speed: f32 = if (p.crouch) cfg.move.crouch_speed else cfg.move.speed;
             const max = if (p.ground) base_speed * len else @min(base_speed * len, cfg.move.air_cap);
             const add = @max(0, max - p.vel.dot(wish));
             if (add > 0) p.vel = p.vel.add(wish.scale(@min(cfg.move.accel * dt, add)));
-            if (p.ground) update.friction(p, cfg, dt);
+            if (p.ground) update.friction(p, dt);
         }
 
-        pub fn phys(p: *Player, cfg: anytype, w: *const Map, dt: f32) void {
+        pub fn phys(p: *Player, w: *const Map, dt: f32) void {
             p.vel.data[1] -= cfg.phys.gravity * dt;
             const h: f32 = if (p.crouch) cfg.size.crouch else cfg.size.stand;
             const box = Collision.bbox{ .min = Vec3.new(-cfg.size.width, -h / 2.0, -cfg.size.width), .max = Vec3.new(cfg.size.width, h / 2.0, cfg.size.width) };
@@ -89,7 +123,7 @@ pub const Player = struct {
             }
         }
 
-        pub fn friction(p: *Player, cfg: anytype, dt: f32) void {
+        pub fn friction(p: *Player, dt: f32) void {
             const s = @sqrt(p.vel.data[0] * p.vel.data[0] + p.vel.data[2] * p.vel.data[2]);
             if (s < cfg.friction.min_speed) {
                 p.vel.data[0] = 0;
@@ -115,12 +149,12 @@ pub const Input = struct {
     };
 
     const handle = struct {
-        pub fn movement(p: *Player, yaw: f32, dt: f32, config: anytype) void {
+        pub fn movement(p: *Player, yaw: f32, dt: f32) void {
             const mv = p.io.vec2(.a, .d, .s, .w);
             var dir = Vec3.zero();
             if (mv.x != 0) dir = dir.add(Vec3.new(@cos(yaw), 0, @sin(yaw)).scale(mv.x));
             if (mv.y != 0) dir = dir.add(Vec3.new(@sin(yaw), 0, -@cos(yaw)).scale(mv.y));
-            Player.update.pos(p, config, dir, dt);
+            Player.update.pos(p, dir, dt);
         }
 
         pub fn crouch(p: *Player, world_map: *Map) void {
@@ -210,8 +244,8 @@ pub const Input = struct {
         }
     };
 
-    pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32, game_cfg: anytype) bool {
-        handle.movement(player_ptr, player_ptr.yaw, dt, game_cfg);
+    pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32) bool {
+        handle.movement(player_ptr, player_ptr.yaw, dt);
         handle.crouch(player_ptr, world_map);
         handle.jump(player_ptr);
         handle.camera(player_ptr);
