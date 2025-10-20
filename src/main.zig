@@ -10,7 +10,6 @@ const world = @import("core/world.zig");
 const gfx = @import("core/render.zig");
 const player = @import("core/player.zig");
 const shader = @import("shaders/cube.glsl.zig");
-const input = @import("input.zig");
 
 const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
@@ -84,7 +83,7 @@ pub const Game = struct {
 
     fn run(g: *Game) void {
         const dt = @as(f32, @floatCast(sapp.frameDuration()));
-        const input_cfg = input.Config{
+        const input_cfg = Player.Input.Config{
             .sensitivity = Game.cfg.input.sens,
             .pitch_limit = Game.cfg.input.pitch_limit,
             .stand_height = Game.cfg.size.stand,
@@ -93,7 +92,7 @@ pub const Game = struct {
             .jump_power = Game.cfg.jump.power,
             .reach = Game.cfg.reach,
         };
-        const world_changed = input.tick(&g.player, &g.world, dt, input_cfg, Game.cfg);
+        const world_changed = Player.Input.tick(&g.player, &g.world, dt, input_cfg, Game.cfg);
         Player.update.phys(&g.player, Game.cfg, &g.world, dt);
 
         frame: switch (world_changed) {
