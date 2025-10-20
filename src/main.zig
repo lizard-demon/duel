@@ -34,10 +34,6 @@ pub const Game = struct {
             pub const y = 3.0;
             pub const z = 58.0;
         };
-        pub const input = struct {
-            pub const sens = 0.002;
-            pub const pitch_limit = 1.57;
-        };
         pub const size = struct {
             pub const stand = 1.8;
             pub const crouch = 0.9;
@@ -59,11 +55,7 @@ pub const Game = struct {
             pub const min_speed = 0.1;
             pub const factor = 4.0;
         };
-        pub const jump = struct {
-            pub const power = 8.0;
-        };
 
-        pub const reach = 10.0;
         pub const respawn_y = -1.0;
     };
 
@@ -84,13 +76,13 @@ pub const Game = struct {
     fn run(g: *Game) void {
         const dt = @as(f32, @floatCast(sapp.frameDuration()));
         const input_cfg = player.Input.Config{
-            .sensitivity = Game.cfg.input.sens,
-            .pitch_limit = Game.cfg.input.pitch_limit,
-            .stand_height = Game.cfg.size.stand,
-            .crouch_height = Game.cfg.size.crouch,
-            .width = Game.cfg.size.width,
-            .jump_power = Game.cfg.jump.power,
-            .reach = Game.cfg.reach,
+            .sensitivity = 0.002,
+            .pitch_limit = 1.57,
+            .stand_height = 1.8,
+            .crouch_height = 0.9,
+            .width = 0.4,
+            .jump_power = 8.0,
+            .reach = 10.0,
         };
         const world_changed = player.Input.tick(&g.player, &g.world, dt, input_cfg, Game.cfg);
         Player.update.phys(&g.player, Game.cfg, &g.world, dt);
