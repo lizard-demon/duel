@@ -3,25 +3,25 @@ const std = @import("std");
 
 pub const Vec3 = struct {
     data: @Vector(3, f32),
-    pub fn new(x: f32, y: f32, z: f32) Vec3 {
+    pub inline fn new(x: f32, y: f32, z: f32) Vec3 {
         return .{ .data = .{ x, y, z } };
     }
-    pub fn zero() Vec3 {
+    pub inline fn zero() Vec3 {
         return .{ .data = @splat(0) };
     }
-    pub fn add(v: Vec3, o: Vec3) Vec3 {
+    pub inline fn add(v: Vec3, o: Vec3) Vec3 {
         return .{ .data = v.data + o.data };
     }
-    pub fn scale(v: Vec3, s: f32) Vec3 {
+    pub inline fn scale(v: Vec3, s: f32) Vec3 {
         return .{ .data = v.data * @as(@Vector(3, f32), @splat(s)) };
     }
-    pub fn sub(v: Vec3, o: Vec3) Vec3 {
+    pub inline fn sub(v: Vec3, o: Vec3) Vec3 {
         return .{ .data = v.data - o.data };
     }
-    pub fn dot(v: Vec3, o: Vec3) f32 {
+    pub inline fn dot(v: Vec3, o: Vec3) f32 {
         return @reduce(.Add, v.data * o.data);
     }
-    pub fn length(v: Vec3) f32 {
+    pub inline fn length(v: Vec3) f32 {
         return @sqrt(v.dot(v));
     }
 };
