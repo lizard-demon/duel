@@ -28,7 +28,7 @@ pub const Vec3 = struct {
 
 pub const Mat4 = struct {
     data: [16]f32,
-    pub fn mul(a: Mat4, b: Mat4) Mat4 {
+    pub inline fn mul(a: Mat4, b: Mat4) Mat4 {
         var r: Mat4 = undefined;
         inline for (0..4) |c| {
             inline for (0..4) |row| {

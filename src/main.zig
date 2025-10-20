@@ -19,7 +19,7 @@ const Player = player.Player;
 
 var verts: [65536]Vertex = undefined;
 var indices: [98304]u16 = undefined;
-const sky = [4]f32{ 0, 0, 0.01, 1 };
+const sky = [4]f32{ 0, 0, 0, 1 };
 
 pub const Game = struct {
     vox: gfx.pipeline,
