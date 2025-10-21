@@ -41,7 +41,7 @@ pub const Player = struct {
             const min_len = 0.001;
         };
         const phys = struct {
-            const gravity = 15.0;
+            const gravity = 12.0;
             const steps = 3;
             const ground_thresh = 0.01;
         };
@@ -170,7 +170,7 @@ pub const Input = struct {
         const stand_height = 1.8;
         const crouch_height = 0.9;
         const width = 0.4;
-        const jump_power = 6.0;
+        const jump_power = 4.0;
         const reach = 10.0;
     };
 
