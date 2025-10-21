@@ -45,6 +45,7 @@ pub const Player = struct {
             const factor = 4.0;
         };
         const respawn_y = -1.0;
+        const succeed_y = 64.0;
     };
 
     pub inline fn spawn(x: f32, y: f32, z: f32) Player {
@@ -113,6 +114,17 @@ pub const Player = struct {
             p.ground = r.hit and @abs(r.vel.data[1]) < cfg.phys.ground_thresh;
 
             if (p.pos.data[1] < cfg.respawn_y) {
+                const new_player = Player.spawn(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z);
+                p.pos = new_player.pos;
+                p.vel = new_player.vel;
+                p.yaw = new_player.yaw;
+                p.pitch = new_player.pitch;
+                p.ground = new_player.ground;
+                p.crouch = new_player.crouch;
+            }
+
+            if (p.pos.data[1] > cfg.succeed_y) {
+                // Player wins! Reset to spawn for now
                 const new_player = Player.spawn(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z);
                 p.pos = new_player.pos;
                 p.vel = new_player.vel;
