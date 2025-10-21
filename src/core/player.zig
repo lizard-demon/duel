@@ -2,6 +2,8 @@ const std = @import("std");
 const math = @import("../lib/math.zig");
 const io = @import("../lib/io.zig");
 const world = @import("world.zig");
+const sokol = @import("sokol");
+const stime = sokol.time;
 
 const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
@@ -16,6 +18,7 @@ pub const Player = struct {
     crouch: bool,
     io: io.IO,
     block: world.Block,
+    spawn_time: u64,
 
     const cfg = struct {
         const spawn = struct {
@@ -49,7 +52,7 @@ pub const Player = struct {
     };
 
     pub inline fn spawn(x: f32, y: f32, z: f32) Player {
-        return .{ .pos = Vec3.new(x, y, z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .io = .{}, .block = 2 };
+        return .{ .pos = Vec3.new(x, y, z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .io = .{}, .block = 2, .spawn_time = stime.now() };
     }
 
     pub inline fn init() Player {
@@ -121,10 +124,18 @@ pub const Player = struct {
                 p.pitch = new_player.pitch;
                 p.ground = new_player.ground;
                 p.crouch = new_player.crouch;
+                p.spawn_time = new_player.spawn_time;
             }
 
             if (p.pos.data[1] > cfg.succeed_y) {
-                // Player wins! Reset to spawn for now
+                // Player wins! Calculate time taken
+                const win_time = stime.now();
+                const elapsed_ticks = stime.diff(win_time, p.spawn_time);
+                const elapsed_seconds = stime.sec(elapsed_ticks);
+
+                std.debug.print("🎉 Victory! Time to reach y={d}: {d:.3} seconds\n", .{ cfg.succeed_y, elapsed_seconds });
+
+                // Reset to spawn for another attempt
                 const new_player = Player.spawn(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z);
                 p.pos = new_player.pos;
                 p.vel = new_player.vel;
@@ -132,6 +143,7 @@ pub const Player = struct {
                 p.pitch = new_player.pitch;
                 p.ground = new_player.ground;
                 p.crouch = new_player.crouch;
+                p.spawn_time = new_player.spawn_time;
             }
         }
 

@@ -28,6 +28,7 @@ pub const Game = struct {
     cube_shader: sokol.gfx.Shader,
 
     fn init() Game {
+        sokol.time.setup();
         sokol.gfx.setup(.{ .environment = sokol.glue.environment(), .logger = .{ .func = sokol.log.func } });
         simgui.setup(.{ .logger = .{ .func = sokol.log.func } });
 
