@@ -22,9 +22,11 @@ pub const Player = struct {
 
     const cfg = struct {
         const spawn = struct {
-            const x = 58.0;
-            const y = 3.0;
-            const z = 58.0;
+            const x = 2.0;
+            const y = 2.0;
+            const z = 2.0;
+            const yaw = std.math.pi;
+            const pitch = 0.0;
         };
         const size = struct {
             const stand = 1.8;
@@ -32,27 +34,27 @@ pub const Player = struct {
             const width = 0.4;
         };
         const move = struct {
-            const speed = 6.0;
+            const speed = 4.0;
             const crouch_speed = speed / 2.0;
             const air_cap = 0.7;
             const accel = 70.0;
             const min_len = 0.001;
         };
         const phys = struct {
-            const gravity = 20.0;
+            const gravity = 15.0;
             const steps = 3;
             const ground_thresh = 0.01;
         };
         const friction = struct {
             const min_speed = 0.1;
-            const factor = 4.0;
+            const factor = 5.0;
         };
-        const respawn_y = -1.0;
+        const respawn_y = 0.0;
         const succeed_y = 64.0;
     };
 
     pub inline fn spawn(x: f32, y: f32, z: f32) Player {
-        return .{ .pos = Vec3.new(x, y, z), .vel = Vec3.zero(), .yaw = 0, .pitch = 0, .ground = false, .crouch = false, .io = .{}, .block = 2, .spawn_time = stime.now() };
+        return .{ .pos = Vec3.new(x, y, z), .vel = Vec3.zero(), .yaw = cfg.spawn.yaw, .pitch = cfg.spawn.pitch, .ground = false, .crouch = false, .io = .{}, .block = 2, .spawn_time = stime.now() };
     }
 
     pub inline fn init() Player {
@@ -168,7 +170,7 @@ pub const Input = struct {
         const stand_height = 1.8;
         const crouch_height = 0.9;
         const width = 0.4;
-        const jump_power = 8.0;
+        const jump_power = 6.0;
         const reach = 10.0;
     };
 
