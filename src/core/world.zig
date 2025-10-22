@@ -71,7 +71,7 @@ pub const Map = struct {
 
 pub const Mesh = struct {
     const FaceInfo = struct { block: Block, is_back: bool };
-    const shades = [_]f32{ 0.8, 1.2, 0.6, 2.0, 1.0, 1.0 };
+    const shades = [_]f32{ 0.8, 0.8, 0.6, 0.8, 1.0, 1.0 };
 
     pub fn build(w: *const Map, verts: []Vertex, indices: []u16, comptime colors: fn (Block) [3]f32) struct { verts: usize, indices: usize } {
         var vi: usize = 0;
