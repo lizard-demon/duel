@@ -31,7 +31,7 @@ pub const Player = struct {
         const size = struct {
             const stand = 1.8;
             const crouch = 0.9;
-            const width = 0.4;
+            const width = 0.49;
         };
         const move = struct {
             const speed = 4.0;
@@ -167,9 +167,6 @@ pub const Input = struct {
     const cfg = struct {
         const sensitivity = 0.002;
         const pitch_limit = std.math.pi / 2.0;
-        const stand_height = 1.8;
-        const crouch_height = stand_height / 2.0;
-        const width = 0.4;
         const jump_power = 4.0;
         const reach = 10.0;
     };
@@ -187,9 +184,9 @@ pub const Input = struct {
             const wish = p.io.shift();
 
             if (p.crouch and !wish) {
-                const diff = (cfg.stand_height - cfg.crouch_height) / 2.0;
+                const diff = (Player.cfg.size.stand - Player.cfg.size.crouch) / 2.0;
                 const test_pos = Vec3.new(p.pos.data[0], p.pos.data[1] + diff, p.pos.data[2]);
-                const standing = Player.bounds.standbox(test_pos, cfg.width, cfg.stand_height);
+                const standing = Player.bounds.standbox(test_pos, Player.cfg.size.width, Player.cfg.size.stand);
 
                 if (!Collision.checkStatic(world_map, standing)) {
                     p.pos.data[1] += diff;
@@ -240,7 +237,7 @@ pub const Input = struct {
                 };
                 const block_pos = Vec3.new(@floatFromInt(place_pos[0]), @floatFromInt(place_pos[1]), @floatFromInt(place_pos[2]));
 
-                const player_box = Player.bounds.bbox(p.pos, p.crouch, cfg.crouch_height, cfg.stand_height, cfg.width);
+                const player_box = Player.bounds.bbox(p.pos, p.crouch, Player.cfg.size.crouch, Player.cfg.size.stand, Player.cfg.size.width);
                 const block_box = Player.bounds.blockbox(block_pos);
 
                 if (!Collision.bbox.overlaps(player_box, block_box)) {
