@@ -8,6 +8,7 @@ const stime = sokol.time;
 const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
 const Map = world.Map;
+const Vec2 = io.Vec2;
 
 pub const Player = struct {
     pos: Vec3,
@@ -19,6 +20,9 @@ pub const Player = struct {
     io: io.IO,
     block: world.Block,
     spawn_time: u64,
+    joystick: VirtualJoystick,
+    ui_break_pressed: bool,
+    ui_place_pressed: bool,
 
     const cfg = struct {
         const spawn = struct {
@@ -54,7 +58,22 @@ pub const Player = struct {
     };
 
     pub inline fn spawn(x: f32, y: f32, z: f32) Player {
-        return .{ .pos = Vec3.new(x, y, z), .vel = Vec3.zero(), .yaw = cfg.spawn.yaw, .pitch = cfg.spawn.pitch, .ground = false, .crouch = false, .io = .{}, .block = 2, .spawn_time = stime.now() };
+        const sokol_app = @import("sokol");
+        const sapp = sokol_app.app;
+        return .{
+            .pos = Vec3.new(x, y, z),
+            .vel = Vec3.zero(),
+            .yaw = cfg.spawn.yaw,
+            .pitch = cfg.spawn.pitch,
+            .ground = false,
+            .crouch = false,
+            .io = .{},
+            .block = 2,
+            .spawn_time = stime.now(),
+            .joystick = VirtualJoystick.init(sapp.widthf(), sapp.heightf()),
+            .ui_break_pressed = false,
+            .ui_place_pressed = false,
+        };
     }
 
     pub inline fn init() Player {
@@ -163,6 +182,125 @@ pub const Player = struct {
     };
 };
 
+pub const VirtualJoystick = struct {
+    center_x: f32,
+    center_y: f32,
+    radius: f32,
+    active: bool,
+    touch_id: ?usize,
+    current_x: f32,
+    current_y: f32,
+    prev_mouse_x: f32,
+    prev_mouse_y: f32,
+
+    const cfg = struct {
+        const radius = 80.0;
+        const vertical_dead_zone = 1.0; // Reduced pixel-based vertical deadzone for direct control
+        const direct_sensitivity = 0.0003; // Direct mouse sensitivity
+        const vertical_sensitivity_factor = 0.4; // Increased vertical sensitivity for better Y movement
+    };
+
+    pub fn init(screen_width: f32, screen_height: f32) VirtualJoystick {
+        return .{
+            .center_x = screen_width * 0.5,
+            .center_y = screen_height * 0.5,
+            .radius = cfg.radius,
+            .active = false,
+            .touch_id = null,
+            .current_x = 0,
+            .current_y = 0,
+            .prev_mouse_x = 0,
+            .prev_mouse_y = 0,
+        };
+    }
+
+    pub fn update(self: *VirtualJoystick, io_state: *const io.IO) Vec2 {
+        var look = Vec2{ .x = 0, .y = 0 };
+
+        // Handle mouse input with direct control only
+        if (io_state.mouse.left) {
+            const dx = io_state.mouse.x - self.center_x;
+            const dy = io_state.mouse.y - self.center_y;
+            const dist = @sqrt(dx * dx + dy * dy);
+
+            if (!self.active and dist <= self.radius) {
+                self.active = true;
+                self.current_x = io_state.mouse.x;
+                self.current_y = io_state.mouse.y;
+                self.prev_mouse_x = io_state.mouse.x;
+                self.prev_mouse_y = io_state.mouse.y;
+            }
+
+            if (self.active) {
+                self.current_x = io_state.mouse.x;
+                self.current_y = io_state.mouse.y;
+
+                // Direct mouse movement control
+                const mouse_dx = self.current_x - self.prev_mouse_x;
+                const mouse_dy = self.current_y - self.prev_mouse_y;
+
+                look.x = mouse_dx * cfg.direct_sensitivity * 60.0;
+
+                // Apply vertical deadzone and reduced sensitivity
+                const abs_mouse_dy = @abs(mouse_dy);
+                if (abs_mouse_dy > cfg.vertical_dead_zone) {
+                    look.y = mouse_dy * cfg.direct_sensitivity * cfg.vertical_sensitivity_factor * 60.0;
+                }
+
+                self.prev_mouse_x = self.current_x;
+                self.prev_mouse_y = self.current_y;
+            }
+        } else {
+            self.active = false;
+            self.touch_id = null;
+        }
+
+        // Handle touch input with direct control
+        if (io_state.num_touches > 0) {
+            for (0..io_state.num_touches) |i| {
+                if (io_state.getTouch(i)) |touch| {
+                    const dx = touch.x - self.center_x;
+                    const dy = touch.y - self.center_y;
+                    const dist = @sqrt(dx * dx + dy * dy);
+
+                    if (!self.active and dist <= self.radius) {
+                        self.active = true;
+                        self.touch_id = touch.id;
+                        self.current_x = touch.x;
+                        self.current_y = touch.y;
+                        self.prev_mouse_x = touch.x;
+                        self.prev_mouse_y = touch.y;
+                    }
+
+                    if (self.active and self.touch_id == touch.id) {
+                        const prev_x = self.current_x;
+                        const prev_y = self.current_y;
+                        self.current_x = touch.x;
+                        self.current_y = touch.y;
+
+                        // Direct touch movement control
+                        const touch_dx = self.current_x - prev_x;
+                        const touch_dy = self.current_y - prev_y;
+
+                        look.x = touch_dx * cfg.direct_sensitivity * 60.0;
+
+                        // Apply vertical deadzone and reduced sensitivity
+                        const abs_touch_dy = @abs(touch_dy);
+                        if (abs_touch_dy > cfg.vertical_dead_zone) {
+                            look.y = touch_dy * cfg.direct_sensitivity * cfg.vertical_sensitivity_factor * 60.0;
+                        }
+                    }
+                }
+            }
+        } else if (self.active and self.touch_id != null) {
+            self.active = false;
+            self.touch_id = null;
+        }
+
+        return look;
+    }
+};
+
 pub const Input = struct {
     const cfg = struct {
         const sensitivity = 0.002;
@@ -173,7 +311,9 @@ pub const Input = struct {
 
     const handle = struct {
         pub fn movement(p: *Player, yaw: f32, dt: f32) void {
+            // Use only keyboard input for movement (WASD)
             const mv = p.io.vec2(.a, .d, .s, .w);
+
             var dir = Vec3.zero();
             if (mv.x != 0) dir = dir.add(Vec3.new(@cos(yaw), 0, @sin(yaw)).scale(mv.x));
             if (mv.y != 0) dir = dir.add(Vec3.new(@sin(yaw), 0, -@cos(yaw)).scale(mv.y));
@@ -205,30 +345,48 @@ pub const Input = struct {
         }
 
         pub inline fn camera(p: *Player) void {
-            if (!p.io.mouse.locked()) return;
-
-            p.yaw += p.io.mouse.dx * cfg.sensitivity;
-            p.pitch = @max(-cfg.pitch_limit, @min(cfg.pitch_limit, p.pitch + p.io.mouse.dy * cfg.sensitivity));
+            // Use hybrid virtual joystick for camera on PC platforms
+            const look_input = p.joystick.update(&p.io);
+            if (look_input.x != 0 or look_input.y != 0) {
+                // Input is already scaled in the joystick update function
+                p.yaw += look_input.x;
+                p.pitch = @max(-cfg.pitch_limit, @min(cfg.pitch_limit, p.pitch + look_input.y));
+            }
         }
 
         pub fn blocks(p: *Player, world_map: *Map) bool {
-            if (!p.io.mouse.locked()) return false;
+            // Allow block interaction without mouse lock for PC platforms
 
             const look = Player.lookdir(p.yaw, p.pitch);
-            const hit = Collision.raycast(world_map, p.pos, look, cfg.reach) orelse return false;
+            const hit = Collision.raycast(world_map, p.pos, look, cfg.reach) orelse {
+                // Debug: Check if buttons are being pressed even when no hit
+                if (p.ui_break_pressed) {
+                    std.debug.print("Break button pressed but no block in range\n", .{});
+                }
+                if (p.ui_place_pressed) {
+                    std.debug.print("Place button pressed but no block in range\n", .{});
+                }
+                return false;
+            };
             const pos = [3]i32{
                 @intFromFloat(@floor(hit.data[0])),
                 @intFromFloat(@floor(hit.data[1])),
                 @intFromFloat(@floor(hit.data[2])),
             };
 
-            // Break block
-            if (p.io.mouse.leftPressed()) {
+            // Break block with Z key or UI button
+            if (p.io.justPressed(.z) or p.ui_break_pressed) {
+                if (p.ui_break_pressed) {
+                    std.debug.print("Breaking block with UI button at {d}, {d}, {d}\n", .{ pos[0], pos[1], pos[2] });
+                }
                 return world_map.set(pos[0], pos[1], pos[2], 0);
             }
 
-            // Place block
-            if (p.io.mouse.rightPressed()) {
+            // Place block with X key or UI button
+            if (p.io.justPressed(.x) or p.ui_place_pressed) {
+                if (p.ui_place_pressed) {
+                    std.debug.print("Attempting to place block with UI button\n", .{});
+                }
                 const prev = hit.sub(look.scale(0.1));
                 const place_pos = [3]i32{
                     @intFromFloat(@floor(prev.data[0])),
@@ -255,15 +413,16 @@ pub const Input = struct {
         }
 
         pub inline fn color(p: *Player) void {
-            if (!p.io.mouse.locked()) return;
+            // Allow color changing without mouse lock for PC platforms
 
             if (p.io.justPressed(.q)) p.block -%= 1;
             if (p.io.justPressed(.e)) p.block +%= 1;
         }
 
         pub inline fn mouse(p: *Player) void {
+            // Disable mouse lock for PC platforms - use virtual joystick instead
             if (p.io.justPressed(.escape)) p.io.mouse.unlock();
-            if (p.io.mouse.left and !p.io.mouse.locked()) p.io.mouse.lock();
+            // Removed mouse lock activation - virtual joystick handles input
         }
     };
 

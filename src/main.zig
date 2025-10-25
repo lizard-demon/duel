@@ -59,7 +59,9 @@ pub const Game = struct {
             false => {
                 // Just draw
                 simgui.newFrame(.{ .width = sapp.width(), .height = sapp.height(), .delta_time = sapp.frameDuration(), .dpi_scale = sapp.dpiScale() });
-                gfx.UI.render(g.player.block);
+                const ui_result = gfx.UI.render(g.player.block, &g.player.joystick);
+                g.player.ui_break_pressed = ui_result.break_pressed;
+                g.player.ui_place_pressed = ui_result.place_pressed;
                 const mvp = Mat4.mul(math.perspective(90, sapp.widthf() / sapp.heightf(), 0.1, 1000), g.player.view());
                 sokol.gfx.beginPass(.{ .action = g.vox.pass, .swapchain = sokol.glue.swapchain() });
                 g.vox.draw(mvp);
@@ -86,6 +88,9 @@ export fn init() void {
 export fn frame() void {
     game.run();
     game.player.io.clean();
+    // Reset UI button states after each frame
+    game.player.ui_break_pressed = false;
+    game.player.ui_place_pressed = false;
 }
 export fn cleanup() void {
     game.deinit();
