@@ -43,11 +43,6 @@ pub const pipeline = struct {
     }
 };
 
-pub const ButtonResult = struct {
-    break_pressed: bool,
-    place_pressed: bool,
-};
-
 pub const UI = struct {
     const cfg = struct {
         const crosshair_size = 8.0;
@@ -60,10 +55,6 @@ pub const UI = struct {
         const joystick_alpha = 0.3;
         const joystick_active_alpha = 0.6;
         const joystick_border_alpha = 0.4;
-        const button_size = 60.0;
-        const button_margin = 20.0;
-        const button_alpha = 0.7;
-        const button_text_alpha = 0.9;
     };
 
     pub const draw = struct {
@@ -159,43 +150,11 @@ pub const UI = struct {
             }
             ig.igEnd();
         }
-
-        pub fn actionButtons() ButtonResult {
-            const w, const h = .{ sapp.widthf(), sapp.heightf() };
-            var result = ButtonResult{ .break_pressed = false, .place_pressed = false };
-
-            // Position buttons on the right side of the screen
-            const button_x = w - cfg.button_size - cfg.button_margin;
-            const break_button_y = h - (cfg.button_size * 2) - (cfg.button_margin * 2);
-
-            // Set up button window
-            ig.igSetNextWindowPos(.{ .x = button_x - 10, .y = break_button_y - 10 }, ig.ImGuiCond_Always);
-            ig.igSetNextWindowSize(.{ .x = cfg.button_size + 20, .y = (cfg.button_size * 2) + cfg.button_margin + 20 }, ig.ImGuiCond_Always);
-            const flags = ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar | ig.ImGuiWindowFlags_NoBackground;
-
-            if (ig.igBegin("ActionButtons", null, flags)) {
-                // Break button (Z key)
-                ig.igSetCursorPos(.{ .x = 10, .y = 10 });
-                if (ig.igButton("Z")) {
-                    result.break_pressed = true;
-                }
-
-                // Place button (X key)
-                ig.igSetCursorPos(.{ .x = 10, .y = 10 + cfg.button_size + cfg.button_margin });
-                if (ig.igButton("X")) {
-                    result.place_pressed = true;
-                }
-            }
-            ig.igEnd();
-
-            return result;
-        }
     };
 
-    pub inline fn render(block: world.Block, joystick: anytype) ButtonResult {
+    pub inline fn render(block: world.Block, joystick: anytype) void {
         draw.crosshair();
         draw.hud(block);
         draw.virtualJoystick(joystick);
-        return draw.actionButtons();
     }
 };

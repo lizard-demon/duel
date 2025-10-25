@@ -21,8 +21,6 @@ pub const Player = struct {
     block: world.Block,
     spawn_time: u64,
     joystick: VirtualJoystick,
-    ui_break_pressed: bool,
-    ui_place_pressed: bool,
 
     const cfg = struct {
         const spawn = struct {
@@ -71,8 +69,6 @@ pub const Player = struct {
             .block = 2,
             .spawn_time = stime.now(),
             .joystick = VirtualJoystick.init(sapp.widthf(), sapp.heightf()),
-            .ui_break_pressed = false,
-            .ui_place_pressed = false,
         };
     }
 
@@ -310,9 +306,21 @@ pub const Input = struct {
     };
 
     const handle = struct {
-        pub fn movement(p: *Player, yaw: f32, dt: f32) void {
-            // Use only keyboard input for movement (WASD)
-            const mv = p.io.vec2(.a, .d, .s, .w);
+        pub fn movement(p: *Player, yaw: f32, dt: f32, look_input: Vec2) void {
+            // Use keyboard input for movement (WASD)
+            var mv = p.io.vec2(.a, .d, .s, .w);
+
+            // Add autostrafe when jumping and turning camera
+            const jump_pressed = p.io.pressed(.space);
+            if (jump_pressed and !p.ground) {
+                if (look_input.x > 0) {
+                    // Turning right - automatically strafe right (D key)
+                    mv.x = 1.0;
+                } else if (look_input.x < 0) {
+                    // Turning left - automatically strafe left (A key)
+                    mv.x = -1.0;
+                }
+            }
 
             var dir = Vec3.zero();
             if (mv.x != 0) dir = dir.add(Vec3.new(@cos(yaw), 0, @sin(yaw)).scale(mv.x));
@@ -337,16 +345,18 @@ pub const Input = struct {
             }
         }
 
-        pub inline fn jump(p: *Player) void {
-            if (p.io.pressed(.space) and p.ground) {
+        pub inline fn jump(p: *Player, yaw: f32) void {
+            _ = yaw; // Unused parameter
+            const jump_pressed = p.io.pressed(.space);
+
+            if (jump_pressed and p.ground) {
                 p.vel.data[1] = cfg.jump_power;
                 p.ground = false;
             }
         }
 
-        pub inline fn camera(p: *Player) void {
+        pub inline fn camera(p: *Player, look_input: Vec2) void {
             // Use hybrid virtual joystick for camera on PC platforms
-            const look_input = p.joystick.update(&p.io);
             if (look_input.x != 0 or look_input.y != 0) {
                 // Input is already scaled in the joystick update function
                 p.yaw += look_input.x;
@@ -355,38 +365,21 @@ pub const Input = struct {
         }
 
         pub fn blocks(p: *Player, world_map: *Map) bool {
-            // Allow block interaction without mouse lock for PC platforms
-
             const look = Player.lookdir(p.yaw, p.pitch);
-            const hit = Collision.raycast(world_map, p.pos, look, cfg.reach) orelse {
-                // Debug: Check if buttons are being pressed even when no hit
-                if (p.ui_break_pressed) {
-                    std.debug.print("Break button pressed but no block in range\n", .{});
-                }
-                if (p.ui_place_pressed) {
-                    std.debug.print("Place button pressed but no block in range\n", .{});
-                }
-                return false;
-            };
+            const hit = Collision.raycast(world_map, p.pos, look, cfg.reach) orelse return false;
             const pos = [3]i32{
                 @intFromFloat(@floor(hit.data[0])),
                 @intFromFloat(@floor(hit.data[1])),
                 @intFromFloat(@floor(hit.data[2])),
             };
 
-            // Break block with Z key or UI button
-            if (p.io.justPressed(.z) or p.ui_break_pressed) {
-                if (p.ui_break_pressed) {
-                    std.debug.print("Breaking block with UI button at {d}, {d}, {d}\n", .{ pos[0], pos[1], pos[2] });
-                }
+            // Break block with Z key
+            if (p.io.justPressed(.z)) {
                 return world_map.set(pos[0], pos[1], pos[2], 0);
             }
 
-            // Place block with X key or UI button
-            if (p.io.justPressed(.x) or p.ui_place_pressed) {
-                if (p.ui_place_pressed) {
-                    std.debug.print("Attempting to place block with UI button\n", .{});
-                }
+            // Place block with X key
+            if (p.io.justPressed(.x)) {
                 const prev = hit.sub(look.scale(0.1));
                 const place_pos = [3]i32{
                     @intFromFloat(@floor(prev.data[0])),
@@ -427,10 +420,13 @@ pub const Input = struct {
     };
 
     pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32) bool {
-        handle.movement(player_ptr, player_ptr.yaw, dt);
+        // Get joystick input once to avoid conflicts
+        const look_input = player_ptr.joystick.update(&player_ptr.io);
+
+        handle.movement(player_ptr, player_ptr.yaw, dt, look_input);
         handle.crouch(player_ptr, world_map);
-        handle.jump(player_ptr);
-        handle.camera(player_ptr);
+        handle.jump(player_ptr, player_ptr.yaw);
+        handle.camera(player_ptr, look_input);
         const world_changed = handle.blocks(player_ptr, world_map);
         handle.color(player_ptr);
         handle.mouse(player_ptr);
