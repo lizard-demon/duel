@@ -57,9 +57,6 @@ pub const Input = struct {
     };
 
     pub fn update(self: *Input, io_state: *const io.IO, dt: f32, on_ground: bool) void {
-        // Clear previous frame state
-        self.state = .{};
-
         // Update autohop timing
         if (on_ground) {
             self.ground_time += dt;
@@ -71,14 +68,21 @@ pub const Input = struct {
         self.touch.update(io_state);
         self.ui.update(self, dt);
 
+        // Get raw keyboard/mouse input
+        const keyboard_jump = io_state.pressed(.space);
+        const keyboard_jump_pressed = io_state.justPressed(.space);
+
+        // Clear previous frame state
+        self.state = .{};
+
         // Desktop input (keyboard + mouse)
         self.updateDesktop(io_state);
 
         // Mobile input (touch)
         self.updateMobile();
 
-        // Update just-pressed states with autohop
-        self.updateJustPressed(io_state, dt, on_ground);
+        // Update just-pressed states with autohop (using raw keyboard state)
+        self.updateJustPressed(io_state, dt, on_ground, keyboard_jump, keyboard_jump_pressed);
     }
 
     fn updateDesktop(self: *Input, io_state: *const io.IO) void {
@@ -124,11 +128,11 @@ pub const Input = struct {
         self.state.place_block = self.state.place_block or self.touch.place_block;
     }
 
-    fn updateJustPressed(self: *Input, io_state: *const io.IO, dt: f32, on_ground: bool) void {
-        const jump_input = io_state.justPressed(.space) or self.touch.jump_pressed;
+    fn updateJustPressed(self: *Input, io_state: *const io.IO, dt: f32, on_ground: bool, keyboard_jump: bool, keyboard_jump_pressed: bool) void {
+        const jump_input = keyboard_jump_pressed or self.touch.jump_pressed;
 
         // Autohop: if holding jump and recently landed, auto-jump
-        const holding_jump = self.state.jump;
+        const holding_jump = keyboard_jump or self.touch.jump;
         const auto_jump = holding_jump and on_ground and self.ground_time < cfg.autohop_window;
 
         self.state.jump_pressed = jump_input or auto_jump;
