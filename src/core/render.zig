@@ -7,7 +7,6 @@ const sapp = sokol.app;
 const ig = @import("cimgui");
 const math = @import("../lib/math.zig");
 const world = @import("world.zig");
-const touch_ui = @import("../lib/touch_ui.zig");
 const input = @import("../lib/input.zig");
 const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
@@ -107,14 +106,14 @@ pub const UI = struct {
             ig.igEnd();
         }
 
-        pub fn touchControls(touch_ui_system: *const touch_ui.TouchUI, input_system: *const input.Input) void {
-            touch_ui_system.render(input_system);
+        pub fn touchControls(input_system: *const input.Input) void {
+            input_system.ui.render(input_system);
         }
     };
 
-    pub inline fn render(block: world.Block, touch_ui_system: *const touch_ui.TouchUI, input_system: *const input.Input) void {
+    pub inline fn render(block: world.Block, input_system: *const input.Input) void {
         draw.crosshair();
         draw.hud(block);
-        draw.touchControls(touch_ui_system, input_system);
+        draw.touchControls(input_system);
     }
 };

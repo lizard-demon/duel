@@ -6,7 +6,7 @@ const simgui = sokol.imgui;
 
 const math = @import("lib/math.zig");
 const io = @import("lib/io.zig");
-const touch_ui = @import("lib/touch_ui.zig");
+
 const world = @import("core/world.zig");
 const gfx = @import("core/render.zig");
 const player = @import("core/player.zig");
@@ -27,7 +27,6 @@ pub const Game = struct {
     player: Player,
     world: Map,
     cube_shader: sokol.gfx.Shader,
-    touch_ui: touch_ui.TouchUI,
 
     fn init() Game {
         sokol.time.setup();
@@ -41,7 +40,6 @@ pub const Game = struct {
             .world = Map.load(),
             .vox = undefined,
             .cube_shader = sh,
-            .touch_ui = .{},
         };
 
         const r = world.Mesh.build(&g.world, &verts, &indices, world.color);
@@ -52,9 +50,6 @@ pub const Game = struct {
 
     fn run(g: *Game) void {
         const dt = @as(f32, @floatCast(sapp.frameDuration()));
-
-        // Update touch UI
-        g.touch_ui.update(&g.player.input, dt);
 
         // Handle input and physics
         const world_changed = player.Input.tick(&g.player, &g.world, dt);
@@ -72,7 +67,7 @@ pub const Game = struct {
             false => {
                 // Just draw
                 simgui.newFrame(.{ .width = sapp.width(), .height = sapp.height(), .delta_time = sapp.frameDuration(), .dpi_scale = sapp.dpiScale() });
-                gfx.UI.render(g.player.block, &g.touch_ui, &g.player.input);
+                gfx.UI.render(g.player.block, &g.player.input);
                 const mvp = Mat4.mul(math.perspective(90, sapp.widthf() / sapp.heightf(), 0.1, 1000), g.player.view());
                 sokol.gfx.beginPass(.{ .action = g.vox.pass, .swapchain = sokol.glue.swapchain() });
                 g.vox.draw(mvp);

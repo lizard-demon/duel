@@ -185,8 +185,8 @@ pub const Input = struct {
     };
 
     pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32) bool {
-        // Update unified input system
-        player_ptr.input.update(&player_ptr.io);
+        // Update unified input system with ground state for autohop
+        player_ptr.input.update(&player_ptr.io, dt, player_ptr.ground);
         const input_state = &player_ptr.input.state;
 
         // Handle all input through unified system
@@ -205,12 +205,15 @@ pub const Input = struct {
         pub fn movement(p: *Player, dt: f32, input_state: *const input.InputState) void {
             var mv = input_state.move;
 
-            // Add autostrafe when jumping and turning camera (bhop technique)
-            if (input_state.jump and !p.ground) {
+            // Improved autostrafe for bunnyhopping
+            if (!p.ground and @abs(input_state.look.x) > 0.001) {
+                const turn_strength = @abs(input_state.look.x) * 100.0; // Scale turn input
+                const strafe_strength = @min(turn_strength, 1.0);
+
                 if (input_state.look.x > 0) {
-                    mv.x = 1.0; // Strafe right when turning right
-                } else if (input_state.look.x < 0) {
-                    mv.x = -1.0; // Strafe left when turning left
+                    mv.x = @max(mv.x, strafe_strength); // Strafe right when turning right
+                } else {
+                    mv.x = @min(mv.x, -strafe_strength); // Strafe left when turning left
                 }
             }
 

@@ -2,6 +2,7 @@
 const std = @import("std");
 const sokol = @import("sokol");
 const sapp = sokol.app;
+const ig = @import("cimgui");
 const io = @import("io.zig");
 const math = @import("math.zig");
 
@@ -44,19 +45,31 @@ pub const InputState = struct {
 pub const Input = struct {
     state: InputState = .{},
     touch: TouchInput = .{},
+    ui: TouchUI = .{},
+
+    // Autohop state
+    last_jump_time: f32 = 0,
+    ground_time: f32 = 0,
 
     const cfg = struct {
         const mouse_sensitivity = 0.002;
-        const touch_sensitivity = 0.003;
-        const pitch_limit = std.math.pi / 2.0;
+        const autohop_window = 0.1; // 100ms window for autohop
     };
 
-    pub fn update(self: *Input, io_state: *const io.IO) void {
+    pub fn update(self: *Input, io_state: *const io.IO, dt: f32, on_ground: bool) void {
         // Clear previous frame state
         self.state = .{};
 
+        // Update autohop timing
+        if (on_ground) {
+            self.ground_time += dt;
+        } else {
+            self.ground_time = 0;
+        }
+
         // Update touch input first
         self.touch.update(io_state);
+        self.ui.update(self, dt);
 
         // Desktop input (keyboard + mouse)
         self.updateDesktop(io_state);
@@ -64,8 +77,8 @@ pub const Input = struct {
         // Mobile input (touch)
         self.updateMobile();
 
-        // Update just-pressed states
-        self.updateJustPressed(io_state);
+        // Update just-pressed states with autohop
+        self.updateJustPressed(io_state, dt, on_ground);
     }
 
     fn updateDesktop(self: *Input, io_state: *const io.IO) void {
@@ -111,8 +124,21 @@ pub const Input = struct {
         self.state.place_block = self.state.place_block or self.touch.place_block;
     }
 
-    fn updateJustPressed(self: *Input, io_state: *const io.IO) void {
-        self.state.jump_pressed = io_state.justPressed(.space) or self.touch.jump_pressed;
+    fn updateJustPressed(self: *Input, io_state: *const io.IO, dt: f32, on_ground: bool) void {
+        const jump_input = io_state.justPressed(.space) or self.touch.jump_pressed;
+
+        // Autohop: if holding jump and recently landed, auto-jump
+        const holding_jump = self.state.jump;
+        const auto_jump = holding_jump and on_ground and self.ground_time < cfg.autohop_window;
+
+        self.state.jump_pressed = jump_input or auto_jump;
+
+        if (self.state.jump_pressed) {
+            self.last_jump_time = 0;
+        } else {
+            self.last_jump_time += dt;
+        }
+
         self.state.break_pressed = io_state.justPressed(.z) or self.touch.break_pressed;
         self.state.place_pressed = io_state.justPressed(.x) or self.touch.place_pressed;
         self.state.pick_pressed = io_state.justPressed(.r);
@@ -160,7 +186,12 @@ pub const TouchInput = struct {
     };
 
     pub fn update(self: *TouchInput, io_state: *const io.IO) void {
-        // Clear previous state
+        // Update just-pressed states BEFORE clearing current state
+        const prev_jump = self.jump;
+        const prev_break = self.break_block;
+        const prev_place = self.place_block;
+
+        // Clear current state
         self.movement = .{ .x = 0, .y = 0 };
         self.look = .{ .x = 0, .y = 0 };
         self.jump = false;
@@ -168,33 +199,28 @@ pub const TouchInput = struct {
         self.break_block = false;
         self.place_block = false;
 
-        // Update just-pressed states
-        self.jump_pressed = self.jump and !self.prev_jump;
-        self.break_pressed = self.break_block and !self.prev_break;
-        self.place_pressed = self.place_block and !self.prev_place;
-
-        self.prev_jump = self.jump;
-        self.prev_break = self.break_block;
-        self.prev_place = self.place_block;
-
         if (io_state.num_touches == 0) {
             self.movement_touch = null;
             self.look_touch = null;
-            return;
-        }
+        } else {
+            const screen_w = sapp.widthf();
+            const screen_h = sapp.heightf();
 
-        const screen_w = sapp.widthf();
-        const screen_h = sapp.heightf();
-
-        // Process all touches
-        for (0..io_state.num_touches) |i| {
-            if (io_state.getTouch(i)) |touch| {
-                self.processTouch(touch, screen_w, screen_h);
+            // Process all touches
+            for (0..io_state.num_touches) |i| {
+                if (io_state.getTouch(i)) |touch| {
+                    self.processTouch(touch, screen_w, screen_h);
+                }
             }
+
+            // Clean up ended touches
+            self.cleanupTouches(io_state);
         }
 
-        // Clean up ended touches
-        self.cleanupTouches(io_state);
+        // Update just-pressed states after processing touches
+        self.jump_pressed = self.jump and !prev_jump;
+        self.break_pressed = self.break_block and !prev_break;
+        self.place_pressed = self.place_block and !prev_place;
     }
 
     fn processTouch(self: *TouchInput, touch: io.Touch, screen_w: f32, screen_h: f32) void {
@@ -327,5 +353,167 @@ pub const TouchInput = struct {
         const look_area_left = screen_w * 0.4;
 
         return x >= look_area_left and x < jump_area_left and y < screen_h - cfg.jump_radius * 2 - 40;
+    }
+};
+
+// Combined Touch UI - Integrated with input system
+pub const TouchUI = struct {
+    show_controls: bool = false,
+    fade_timer: f32 = 0,
+
+    const cfg = struct {
+        const fade_duration = 2.0;
+        const alpha_base = 0.15;
+        const alpha_active = 0.4;
+        const alpha_pressed = 0.6;
+
+        // Colors
+        const movement_color = [3]f32{ 0.2, 0.6, 1.0 };
+        const jump_color = [3]f32{ 1.0, 0.4, 0.2 };
+        const crouch_color = [3]f32{ 0.8, 0.8, 0.2 };
+        const look_color = [3]f32{ 0.6, 0.6, 0.6 };
+    };
+
+    pub fn update(self: *TouchUI, input_system: *const Input, dt: f32) void {
+        // Show controls if touch input is detected
+        const has_touch_input = input_system.touch.movement_touch != null or
+            input_system.touch.look_touch != null or
+            input_system.touch.jump or
+            input_system.touch.crouch;
+
+        if (has_touch_input) {
+            self.show_controls = true;
+            self.fade_timer = cfg.fade_duration;
+        } else if (self.fade_timer > 0) {
+            self.fade_timer -= dt;
+            if (self.fade_timer <= 0) {
+                self.show_controls = false;
+            }
+        }
+    }
+
+    pub fn render(self: *const TouchUI, input_system: *const Input) void {
+        if (!self.show_controls) return;
+
+        const screen_w = sapp.widthf();
+        const screen_h = sapp.heightf();
+        const fade_alpha: f32 = if (self.fade_timer > 0) 1.0 else 0.0;
+
+        ig.igSetNextWindowPos(.{ .x = 0, .y = 0 }, ig.ImGuiCond_Always);
+        ig.igSetNextWindowSize(.{ .x = screen_w, .y = screen_h }, ig.ImGuiCond_Always);
+        const flags = ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize |
+            ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar |
+            ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoInputs;
+
+        if (ig.igBegin("TouchControls", null, flags)) {
+            const dl = ig.igGetWindowDrawList();
+
+            self.drawMovementControl(dl, input_system, fade_alpha);
+            self.drawJumpControl(dl, input_system, screen_w, screen_h, fade_alpha);
+            self.drawCrouchControl(dl, input_system, screen_h, fade_alpha);
+            self.drawLookArea(dl, input_system, screen_w, screen_h, fade_alpha);
+        }
+        ig.igEnd();
+    }
+
+    fn drawMovementControl(self: *const TouchUI, dl: *ig.ImDrawList, input_system: *const Input, fade_alpha: f32) void {
+        _ = self;
+        const radius = TouchInput.cfg.movement_radius;
+        const center_x = radius + 20;
+        const center_y = sapp.heightf() - radius - 20;
+
+        const is_active = input_system.touch.movement_touch != null;
+        const alpha: f32 = if (is_active) cfg.alpha_active else cfg.alpha_base;
+        const final_alpha = alpha * fade_alpha;
+
+        // Outer circle
+        const outer_color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.movement_color[0], .y = cfg.movement_color[1], .z = cfg.movement_color[2], .w = final_alpha });
+        const border_color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.movement_color[0], .y = cfg.movement_color[1], .z = cfg.movement_color[2], .w = final_alpha * 0.8 });
+
+        ig.ImDrawList_AddCircleFilled(dl, .{ .x = center_x, .y = center_y }, radius, outer_color, 32);
+        ig.ImDrawList_AddCircle(dl, .{ .x = center_x, .y = center_y }, radius, border_color);
+
+        // Inner knob if active
+        if (is_active and input_system.touch.movement_touch != null) {
+            const touch = input_system.touch.movement_touch.?;
+            const knob_radius = radius * 0.2;
+            const knob_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = final_alpha * 1.5 });
+
+            ig.ImDrawList_AddCircleFilled(dl, .{ .x = touch.current_x, .y = touch.current_y }, knob_radius, knob_color, 16);
+        }
+
+        // Center dot
+        const center_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = final_alpha * 0.6 });
+        ig.ImDrawList_AddCircleFilled(dl, .{ .x = center_x, .y = center_y }, 3.0, center_color, 8);
+    }
+
+    fn drawJumpControl(self: *const TouchUI, dl: *ig.ImDrawList, input_system: *const Input, screen_w: f32, screen_h: f32, fade_alpha: f32) void {
+        _ = self;
+        const radius = TouchInput.cfg.jump_radius;
+        const center_x = screen_w - radius - 20;
+        const center_y = screen_h - radius - 20;
+
+        const is_pressed = input_system.touch.jump;
+        const alpha: f32 = if (is_pressed) cfg.alpha_pressed else cfg.alpha_base;
+        const final_alpha = alpha * fade_alpha;
+
+        const color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.jump_color[0], .y = cfg.jump_color[1], .z = cfg.jump_color[2], .w = final_alpha });
+        const border_color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.jump_color[0], .y = cfg.jump_color[1], .z = cfg.jump_color[2], .w = final_alpha * 0.8 });
+
+        ig.ImDrawList_AddCircleFilled(dl, .{ .x = center_x, .y = center_y }, radius, color, 24);
+        ig.ImDrawList_AddCircle(dl, .{ .x = center_x, .y = center_y }, radius, border_color);
+
+        // Jump icon (simple up arrow)
+        const icon_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = final_alpha * 1.2 });
+        const arrow_size = radius * 0.4;
+        ig.ImDrawList_AddTriangleFilled(dl, .{ .x = center_x, .y = center_y - arrow_size }, .{ .x = center_x - arrow_size * 0.6, .y = center_y + arrow_size * 0.3 }, .{ .x = center_x + arrow_size * 0.6, .y = center_y + arrow_size * 0.3 }, icon_color);
+    }
+
+    fn drawCrouchControl(self: *const TouchUI, dl: *ig.ImDrawList, input_system: *const Input, screen_h: f32, fade_alpha: f32) void {
+        _ = self;
+        const radius = TouchInput.cfg.crouch_radius;
+        const center_x = radius + 20;
+        const center_y = screen_h - TouchInput.cfg.movement_radius * 2 - radius - 30;
+
+        const is_pressed = input_system.touch.crouch;
+        const alpha: f32 = if (is_pressed) cfg.alpha_pressed else cfg.alpha_base;
+        const final_alpha = alpha * fade_alpha;
+
+        const color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.crouch_color[0], .y = cfg.crouch_color[1], .z = cfg.crouch_color[2], .w = final_alpha });
+        const border_color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.crouch_color[0], .y = cfg.crouch_color[1], .z = cfg.crouch_color[2], .w = final_alpha * 0.8 });
+
+        ig.ImDrawList_AddCircleFilled(dl, .{ .x = center_x, .y = center_y }, radius, color, 20);
+        ig.ImDrawList_AddCircle(dl, .{ .x = center_x, .y = center_y }, radius, border_color);
+
+        // Crouch icon (simple down arrow)
+        const icon_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = final_alpha * 1.2 });
+        const arrow_size = radius * 0.4;
+        ig.ImDrawList_AddTriangleFilled(dl, .{ .x = center_x, .y = center_y + arrow_size }, .{ .x = center_x - arrow_size * 0.6, .y = center_y - arrow_size * 0.3 }, .{ .x = center_x + arrow_size * 0.6, .y = center_y - arrow_size * 0.3 }, icon_color);
+    }
+
+    fn drawLookArea(self: *const TouchUI, dl: *ig.ImDrawList, input_system: *const Input, screen_w: f32, screen_h: f32, fade_alpha: f32) void {
+        _ = self;
+        const is_active = input_system.touch.look_touch != null;
+        if (!is_active) return;
+
+        const alpha = cfg.alpha_base * 0.5;
+        const final_alpha = alpha * fade_alpha;
+
+        // Draw subtle look area indicator
+        const jump_area_left = screen_w - TouchInput.cfg.jump_radius * 2 - 40;
+        const look_area_left = screen_w * 0.4;
+        const look_area_bottom = screen_h - TouchInput.cfg.jump_radius * 2 - 40;
+
+        const color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.look_color[0], .y = cfg.look_color[1], .z = cfg.look_color[2], .w = final_alpha });
+
+        ig.ImDrawList_AddRectFilled(dl, .{ .x = look_area_left, .y = 0 }, .{ .x = jump_area_left, .y = look_area_bottom }, color);
+
+        // Draw crosshair at touch point if active
+        if (input_system.touch.look_touch) |touch| {
+            const crosshair_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = final_alpha * 2.0 });
+            const size = 8.0;
+            ig.ImDrawList_AddLine(dl, .{ .x = touch.current_x - size, .y = touch.current_y }, .{ .x = touch.current_x + size, .y = touch.current_y }, crosshair_color);
+            ig.ImDrawList_AddLine(dl, .{ .x = touch.current_x, .y = touch.current_y - size }, .{ .x = touch.current_x, .y = touch.current_y + size }, crosshair_color);
+        }
     }
 };
