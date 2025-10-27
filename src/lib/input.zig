@@ -52,7 +52,7 @@ pub const Input = struct {
     ground_time: f32 = 0,
 
     const cfg = struct {
-        const mouse_sensitivity = 0.002;
+        const mouse_sensitivity = 0.008; // Increased from 0.002
         const autohop_window = 0.1; // 100ms window for autohop
     };
 
@@ -177,7 +177,7 @@ pub const TouchInput = struct {
         pub const movement_radius = 60.0;
         pub const jump_radius = 40.0;
         pub const crouch_radius = 35.0;
-        pub const look_sensitivity = 0.003;
+        pub const look_sensitivity = 0.012; // Increased from 0.003
         pub const movement_deadzone = 0.1;
     };
 
