@@ -6,6 +6,7 @@ const simgui = sokol.imgui;
 
 const math = @import("lib/math.zig");
 const io = @import("lib/io.zig");
+const audio = @import("lib/audio.zig");
 
 const world = @import("core/world.zig");
 const gfx = @import("core/render.zig");
@@ -27,11 +28,14 @@ pub const Game = struct {
     player: Player,
     world: Map,
     cube_shader: sokol.gfx.Shader,
+    audio_system: audio.Audio,
 
     fn init() Game {
         sokol.time.setup();
         sokol.gfx.setup(.{ .environment = sokol.glue.environment(), .logger = .{ .func = sokol.log.func } });
         simgui.setup(.{ .logger = .{ .func = sokol.log.func } });
+
+        const audio_system = audio.Audio.init();
 
         const sh_desc = shader.cubeShaderDesc(sokol.gfx.queryBackend());
         const sh = sokol.gfx.makeShader(sh_desc);
@@ -40,6 +44,7 @@ pub const Game = struct {
             .world = Map.load(),
             .vox = undefined,
             .cube_shader = sh,
+            .audio_system = audio_system,
         };
 
         const r = world.Mesh.build(&g.world, &verts, &indices, world.color);
@@ -82,6 +87,7 @@ pub const Game = struct {
         g.world.save();
         g.vox.deinit();
         if (g.cube_shader.id != 0) sokol.gfx.destroyShader(g.cube_shader);
+        audio.Audio.deinit();
         simgui.shutdown();
         sokol.gfx.shutdown();
     }

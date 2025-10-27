@@ -2,6 +2,7 @@ const std = @import("std");
 const math = @import("../lib/math.zig");
 const io = @import("../lib/io.zig");
 const input = @import("../lib/input.zig");
+const audio = @import("../lib/audio.zig");
 const world = @import("world.zig");
 const sokol = @import("sokol");
 const stime = sokol.time;
@@ -17,6 +18,7 @@ pub const Player = struct {
     yaw: f32,
     pitch: f32,
     ground: bool,
+    prev_ground: bool,
     crouch: bool,
     io: io.IO,
     input: input.Input,
@@ -63,6 +65,7 @@ pub const Player = struct {
             .yaw = cfg.spawn.yaw,
             .pitch = cfg.spawn.pitch,
             .ground = false,
+            .prev_ground = false,
             .crouch = false,
             .io = .{},
             .input = .{},
@@ -130,7 +133,15 @@ pub const Player = struct {
             const r = Collision.sweep(w, p.pos, box, p.vel.scale(dt), cfg.phys.steps);
             p.pos = r.pos;
             p.vel = r.vel.scale(1 / dt);
+
+            // Update ground state and detect landing
+            p.prev_ground = p.ground;
             p.ground = r.hit and @abs(r.vel.data[1]) < cfg.phys.ground_thresh;
+
+            // Play landing sound if we just landed
+            if (p.ground and !p.prev_ground) {
+                audio.Audio.playLandSound();
+            }
 
             if (p.pos.data[1] < cfg.respawn_y) {
                 const new_player = Player.spawn(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z);
@@ -139,6 +150,7 @@ pub const Player = struct {
                 p.yaw = new_player.yaw;
                 p.pitch = new_player.pitch;
                 p.ground = new_player.ground;
+                p.prev_ground = new_player.prev_ground;
                 p.crouch = new_player.crouch;
                 p.spawn_time = new_player.spawn_time;
             }
@@ -158,6 +170,7 @@ pub const Player = struct {
                 p.yaw = new_player.yaw;
                 p.pitch = new_player.pitch;
                 p.ground = new_player.ground;
+                p.prev_ground = new_player.prev_ground;
                 p.crouch = new_player.crouch;
                 p.spawn_time = new_player.spawn_time;
             }
@@ -244,6 +257,8 @@ pub const Input = struct {
             if (input_state.jump_pressed and p.ground) {
                 p.vel.data[1] = cfg.jump_power;
                 p.ground = false;
+                // Play jump sound
+                audio.Audio.playJumpSound();
             }
         }
 
