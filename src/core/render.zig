@@ -7,6 +7,8 @@ const sapp = sokol.app;
 const ig = @import("cimgui");
 const math = @import("../lib/math.zig");
 const world = @import("world.zig");
+const touch_ui = @import("../lib/touch_ui.zig");
+const input = @import("../lib/input.zig");
 const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
 const Vertex = math.Vertex;
@@ -52,9 +54,6 @@ pub const UI = struct {
         const hud_y = 16.0;
         const hud_w = 120.0;
         const hud_h = 70.0;
-        const joystick_alpha = 0.3;
-        const joystick_active_alpha = 0.6;
-        const joystick_border_alpha = 0.4;
     };
 
     pub const draw = struct {
@@ -108,53 +107,14 @@ pub const UI = struct {
             ig.igEnd();
         }
 
-        pub fn virtualJoystick(joystick: anytype) void {
-            const w, const h = .{ sapp.widthf(), sapp.heightf() };
-
-            ig.igSetNextWindowPos(.{ .x = 0, .y = 0 }, ig.ImGuiCond_Always);
-            ig.igSetNextWindowSize(.{ .x = w, .y = h }, ig.ImGuiCond_Always);
-            const flags = ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar | ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoInputs;
-            if (ig.igBegin("VirtualJoystick", null, flags)) {
-                const dl = ig.igGetWindowDrawList();
-
-                // Show direct control area for PC platforms
-                {
-                    const center_x = joystick.center_x;
-                    const center_y = joystick.center_y;
-                    const radius = joystick.radius;
-
-                    // Draw direct control circle
-                    const outer_alpha: f32 = if (joystick.active) cfg.joystick_active_alpha else cfg.joystick_alpha;
-                    const direct_color = ig.igColorConvertFloat4ToU32(.{ .x = 0.8, .y = 0.8, .z = 1.0, .w = outer_alpha });
-                    const border_color = ig.igColorConvertFloat4ToU32(.{ .x = 0.8, .y = 0.8, .z = 1.0, .w = cfg.joystick_border_alpha });
-
-                    ig.ImDrawList_AddCircleFilled(dl, .{ .x = center_x, .y = center_y }, radius, direct_color, 32);
-                    ig.ImDrawList_AddCircle(dl, .{ .x = center_x, .y = center_y }, radius, border_color);
-
-                    // Draw center dot for reference
-                    const center_dot_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 0.6 });
-                    ig.ImDrawList_AddCircleFilled(dl, .{ .x = center_x, .y = center_y }, 3.0, center_dot_color, 8);
-
-                    // Draw inner knob if active
-                    if (joystick.active) {
-                        const knob_radius = radius * 0.15;
-                        const knob_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 0.9 });
-                        ig.ImDrawList_AddCircleFilled(dl, .{ .x = joystick.current_x, .y = joystick.current_y }, knob_radius, knob_color, 16);
-                        ig.ImDrawList_AddCircle(dl, .{ .x = joystick.current_x, .y = joystick.current_y }, knob_radius, border_color);
-                    }
-
-                    // Draw label for direct control
-                    const label_color = ig.igColorConvertFloat4ToU32(.{ .x = 0.8, .y = 0.8, .z = 1.0, .w = 0.8 });
-                    ig.ImDrawList_AddText(dl, .{ .x = center_x - 20, .y = center_y + radius + 10 }, label_color, "DIRECT");
-                }
-            }
-            ig.igEnd();
+        pub fn touchControls(touch_ui_system: *const touch_ui.TouchUI, input_system: *const input.Input) void {
+            touch_ui_system.render(input_system);
         }
     };
 
-    pub inline fn render(block: world.Block, joystick: anytype) void {
+    pub inline fn render(block: world.Block, touch_ui_system: *const touch_ui.TouchUI, input_system: *const input.Input) void {
         draw.crosshair();
         draw.hud(block);
-        draw.virtualJoystick(joystick);
+        draw.touchControls(touch_ui_system, input_system);
     }
 };

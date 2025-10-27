@@ -1,6 +1,7 @@
 const std = @import("std");
 const math = @import("../lib/math.zig");
 const io = @import("../lib/io.zig");
+const input = @import("../lib/input.zig");
 const world = @import("world.zig");
 const sokol = @import("sokol");
 const stime = sokol.time;
@@ -18,9 +19,9 @@ pub const Player = struct {
     ground: bool,
     crouch: bool,
     io: io.IO,
+    input: input.Input,
     block: world.Block,
     spawn_time: u64,
-    joystick: VirtualJoystick,
 
     const cfg = struct {
         const spawn = struct {
@@ -56,8 +57,6 @@ pub const Player = struct {
     };
 
     pub inline fn spawn(x: f32, y: f32, z: f32) Player {
-        const sokol_app = @import("sokol");
-        const sapp = sokol_app.app;
         return .{
             .pos = Vec3.new(x, y, z),
             .vel = Vec3.zero(),
@@ -66,9 +65,9 @@ pub const Player = struct {
             .ground = false,
             .crouch = false,
             .io = .{},
+            .input = .{},
             .block = 2,
             .spawn_time = stime.now(),
-            .joystick = VirtualJoystick.init(sapp.widthf(), sapp.heightf()),
         };
     }
 
@@ -178,158 +177,51 @@ pub const Player = struct {
     };
 };
 
-pub const VirtualJoystick = struct {
-    center_x: f32,
-    center_y: f32,
-    radius: f32,
-    active: bool,
-    touch_id: ?usize,
-    current_x: f32,
-    current_y: f32,
-    prev_mouse_x: f32,
-    prev_mouse_y: f32,
-
-    const cfg = struct {
-        const radius = 80.0;
-        const vertical_dead_zone = 1.0; // Reduced pixel-based vertical deadzone for direct control
-        const direct_sensitivity = 0.0003; // Direct mouse sensitivity
-        const vertical_sensitivity_factor = 0.4; // Increased vertical sensitivity for better Y movement
-    };
-
-    pub fn init(screen_width: f32, screen_height: f32) VirtualJoystick {
-        return .{
-            .center_x = screen_width * 0.5,
-            .center_y = screen_height * 0.5,
-            .radius = cfg.radius,
-            .active = false,
-            .touch_id = null,
-            .current_x = 0,
-            .current_y = 0,
-            .prev_mouse_x = 0,
-            .prev_mouse_y = 0,
-        };
-    }
-
-    pub fn update(self: *VirtualJoystick, io_state: *const io.IO) Vec2 {
-        var look = Vec2{ .x = 0, .y = 0 };
-
-        // Handle mouse input with direct control only
-        if (io_state.mouse.left) {
-            const dx = io_state.mouse.x - self.center_x;
-            const dy = io_state.mouse.y - self.center_y;
-            const dist = @sqrt(dx * dx + dy * dy);
-
-            if (!self.active and dist <= self.radius) {
-                self.active = true;
-                self.current_x = io_state.mouse.x;
-                self.current_y = io_state.mouse.y;
-                self.prev_mouse_x = io_state.mouse.x;
-                self.prev_mouse_y = io_state.mouse.y;
-            }
-
-            if (self.active) {
-                self.current_x = io_state.mouse.x;
-                self.current_y = io_state.mouse.y;
-
-                // Direct mouse movement control
-                const mouse_dx = self.current_x - self.prev_mouse_x;
-                const mouse_dy = self.current_y - self.prev_mouse_y;
-
-                look.x = mouse_dx * cfg.direct_sensitivity * 60.0;
-
-                // Apply vertical deadzone and reduced sensitivity
-                const abs_mouse_dy = @abs(mouse_dy);
-                if (abs_mouse_dy > cfg.vertical_dead_zone) {
-                    look.y = mouse_dy * cfg.direct_sensitivity * cfg.vertical_sensitivity_factor * 60.0;
-                }
-
-                self.prev_mouse_x = self.current_x;
-                self.prev_mouse_y = self.current_y;
-            }
-        } else {
-            self.active = false;
-            self.touch_id = null;
-        }
-
-        // Handle touch input with direct control
-        if (io_state.num_touches > 0) {
-            for (0..io_state.num_touches) |i| {
-                if (io_state.getTouch(i)) |touch| {
-                    const dx = touch.x - self.center_x;
-                    const dy = touch.y - self.center_y;
-                    const dist = @sqrt(dx * dx + dy * dy);
-
-                    if (!self.active and dist <= self.radius) {
-                        self.active = true;
-                        self.touch_id = touch.id;
-                        self.current_x = touch.x;
-                        self.current_y = touch.y;
-                        self.prev_mouse_x = touch.x;
-                        self.prev_mouse_y = touch.y;
-                    }
-
-                    if (self.active and self.touch_id == touch.id) {
-                        const prev_x = self.current_x;
-                        const prev_y = self.current_y;
-                        self.current_x = touch.x;
-                        self.current_y = touch.y;
-
-                        // Direct touch movement control
-                        const touch_dx = self.current_x - prev_x;
-                        const touch_dy = self.current_y - prev_y;
-
-                        look.x = touch_dx * cfg.direct_sensitivity * 60.0;
-
-                        // Apply vertical deadzone and reduced sensitivity
-                        const abs_touch_dy = @abs(touch_dy);
-                        if (abs_touch_dy > cfg.vertical_dead_zone) {
-                            look.y = touch_dy * cfg.direct_sensitivity * cfg.vertical_sensitivity_factor * 60.0;
-                        }
-                    }
-                }
-            }
-        } else if (self.active and self.touch_id != null) {
-            self.active = false;
-            self.touch_id = null;
-        }
-
-        return look;
-    }
-};
-
 pub const Input = struct {
     const cfg = struct {
-        const sensitivity = 0.002;
         const pitch_limit = std.math.pi / 2.0;
         const jump_power = 4.0;
         const reach = 10.0;
     };
 
-    const handle = struct {
-        pub fn movement(p: *Player, yaw: f32, dt: f32, look_input: Vec2) void {
-            // Use keyboard input for movement (WASD)
-            var mv = p.io.vec2(.a, .d, .s, .w);
+    pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32) bool {
+        // Update unified input system
+        player_ptr.input.update(&player_ptr.io);
+        const input_state = &player_ptr.input.state;
 
-            // Add autostrafe when jumping and turning camera
-            const jump_pressed = p.io.pressed(.space);
-            if (jump_pressed and !p.ground) {
-                if (look_input.x > 0) {
-                    // Turning right - automatically strafe right (D key)
-                    mv.x = 1.0;
-                } else if (look_input.x < 0) {
-                    // Turning left - automatically strafe left (A key)
-                    mv.x = -1.0;
+        // Handle all input through unified system
+        handle.movement(player_ptr, dt, input_state);
+        handle.crouch(player_ptr, world_map, input_state);
+        handle.jump(player_ptr, input_state);
+        handle.camera(player_ptr, input_state);
+        const world_changed = handle.blocks(player_ptr, world_map, input_state);
+        handle.color(player_ptr, input_state);
+        handle.mouse(player_ptr, input_state);
+
+        return world_changed;
+    }
+
+    const handle = struct {
+        pub fn movement(p: *Player, dt: f32, input_state: *const input.InputState) void {
+            var mv = input_state.move;
+
+            // Add autostrafe when jumping and turning camera (bhop technique)
+            if (input_state.jump and !p.ground) {
+                if (input_state.look.x > 0) {
+                    mv.x = 1.0; // Strafe right when turning right
+                } else if (input_state.look.x < 0) {
+                    mv.x = -1.0; // Strafe left when turning left
                 }
             }
 
             var dir = Vec3.zero();
-            if (mv.x != 0) dir = dir.add(Vec3.new(@cos(yaw), 0, @sin(yaw)).scale(mv.x));
-            if (mv.y != 0) dir = dir.add(Vec3.new(@sin(yaw), 0, -@cos(yaw)).scale(mv.y));
+            if (mv.x != 0) dir = dir.add(Vec3.new(@cos(p.yaw), 0, @sin(p.yaw)).scale(mv.x));
+            if (mv.y != 0) dir = dir.add(Vec3.new(@sin(p.yaw), 0, -@cos(p.yaw)).scale(mv.y));
             Player.update.pos(p, dir, dt);
         }
 
-        pub fn crouch(p: *Player, world_map: *Map) void {
-            const wish = p.io.shift();
+        pub fn crouch(p: *Player, world_map: *Map, input_state: *const input.InputState) void {
+            const wish = input_state.crouch;
 
             if (p.crouch and !wish) {
                 const diff = (Player.cfg.size.stand - Player.cfg.size.crouch) / 2.0;
@@ -345,26 +237,21 @@ pub const Input = struct {
             }
         }
 
-        pub inline fn jump(p: *Player, yaw: f32) void {
-            _ = yaw; // Unused parameter
-            const jump_pressed = p.io.pressed(.space);
-
-            if (jump_pressed and p.ground) {
+        pub fn jump(p: *Player, input_state: *const input.InputState) void {
+            if (input_state.jump_pressed and p.ground) {
                 p.vel.data[1] = cfg.jump_power;
                 p.ground = false;
             }
         }
 
-        pub inline fn camera(p: *Player, look_input: Vec2) void {
-            // Use hybrid virtual joystick for camera on PC platforms
-            if (look_input.x != 0 or look_input.y != 0) {
-                // Input is already scaled in the joystick update function
-                p.yaw += look_input.x;
-                p.pitch = @max(-cfg.pitch_limit, @min(cfg.pitch_limit, p.pitch + look_input.y));
+        pub fn camera(p: *Player, input_state: *const input.InputState) void {
+            if (input_state.look.x != 0 or input_state.look.y != 0) {
+                p.yaw += input_state.look.x;
+                p.pitch = @max(-cfg.pitch_limit, @min(cfg.pitch_limit, p.pitch + input_state.look.y));
             }
         }
 
-        pub fn blocks(p: *Player, world_map: *Map) bool {
+        pub fn blocks(p: *Player, world_map: *Map, input_state: *const input.InputState) bool {
             const look = Player.lookdir(p.yaw, p.pitch);
             const hit = Collision.raycast(world_map, p.pos, look, cfg.reach) orelse return false;
             const pos = [3]i32{
@@ -373,13 +260,13 @@ pub const Input = struct {
                 @intFromFloat(@floor(hit.data[2])),
             };
 
-            // Break block with Z key
-            if (p.io.justPressed(.z)) {
+            // Break block
+            if (input_state.break_pressed) {
                 return world_map.set(pos[0], pos[1], pos[2], 0);
             }
 
-            // Place block with X key
-            if (p.io.justPressed(.x)) {
+            // Place block
+            if (input_state.place_pressed) {
                 const prev = hit.sub(look.scale(0.1));
                 const place_pos = [3]i32{
                     @intFromFloat(@floor(prev.data[0])),
@@ -397,7 +284,7 @@ pub const Input = struct {
             }
 
             // Pick block color
-            if (p.io.justPressed(.r)) {
+            if (input_state.pick_pressed) {
                 const target = world_map.get(pos[0], pos[1], pos[2]);
                 if (target != 0) p.block = target;
             }
@@ -405,33 +292,15 @@ pub const Input = struct {
             return false;
         }
 
-        pub inline fn color(p: *Player) void {
-            // Allow color changing without mouse lock for PC platforms
-
-            if (p.io.justPressed(.q)) p.block -%= 1;
-            if (p.io.justPressed(.e)) p.block +%= 1;
+        pub fn color(p: *Player, input_state: *const input.InputState) void {
+            if (input_state.prev_block_pressed) p.block -%= 1;
+            if (input_state.next_block_pressed) p.block +%= 1;
         }
 
-        pub inline fn mouse(p: *Player) void {
-            // Disable mouse lock for PC platforms - use virtual joystick instead
-            if (p.io.justPressed(.escape)) p.io.mouse.unlock();
-            // Removed mouse lock activation - virtual joystick handles input
+        pub fn mouse(p: *Player, input_state: *const input.InputState) void {
+            if (input_state.escape_pressed) p.io.mouse.unlock();
         }
     };
-
-    pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32) bool {
-        // Get joystick input once to avoid conflicts
-        const look_input = player_ptr.joystick.update(&player_ptr.io);
-
-        handle.movement(player_ptr, player_ptr.yaw, dt, look_input);
-        handle.crouch(player_ptr, world_map);
-        handle.jump(player_ptr, player_ptr.yaw);
-        handle.camera(player_ptr, look_input);
-        const world_changed = handle.blocks(player_ptr, world_map);
-        handle.color(player_ptr);
-        handle.mouse(player_ptr);
-        return world_changed;
-    }
 };
 
 pub const Collision = struct {
