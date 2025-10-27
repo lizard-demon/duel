@@ -68,91 +68,103 @@ pub const Input = struct {
         self.touch.update(io_state);
         self.ui.update(self, dt);
 
-        // Get raw keyboard/mouse input
-        const keyboard_jump = io_state.pressed(.space);
-        const keyboard_jump_pressed = io_state.justPressed(.space);
+        // Capture ALL raw input states FIRST before any processing
+        const raw_move = io_state.vec2(.a, .d, .s, .w);
+        const raw_look_x: f32 = if (io_state.mouse.locked() or io_state.mouse.left) io_state.mouse.dx * cfg.mouse_sensitivity else 0;
+        const raw_look_y: f32 = if (io_state.mouse.locked() or io_state.mouse.left) io_state.mouse.dy * cfg.mouse_sensitivity else 0;
+        const raw_jump = io_state.pressed(.space);
+        const raw_crouch = io_state.shift();
+        const raw_break_block = io_state.pressed(.z);
+        const raw_place_block = io_state.pressed(.x);
+        const raw_pick_block = io_state.pressed(.r);
+        const raw_prev_block = io_state.pressed(.q);
+        const raw_next_block = io_state.pressed(.e);
+        const raw_escape = io_state.pressed(.escape);
+        const raw_jump_pressed = io_state.justPressed(.space);
+        const raw_break_pressed = io_state.justPressed(.z);
+        const raw_place_pressed = io_state.justPressed(.x);
+        const raw_pick_pressed = io_state.justPressed(.r);
+        const raw_prev_block_pressed = io_state.justPressed(.q);
+        const raw_next_block_pressed = io_state.justPressed(.e);
+        const raw_escape_pressed = io_state.justPressed(.escape);
 
-        // Clear previous frame state
-        self.state = .{};
+        // Now build the final state by combining raw input with touch
+        self.state = InputState{
+            // Movement - combine keyboard and touch
+            .move = Vec2{
+                .x = raw_move.x + self.touch.movement.x,
+                .y = raw_move.y + self.touch.movement.y,
+            },
 
-        // Desktop input (keyboard + mouse)
-        self.updateDesktop(io_state);
+            // Look - combine mouse and touch
+            .look = Vec2{
+                .x = raw_look_x + self.touch.look.x,
+                .y = raw_look_y + self.touch.look.y,
+            },
 
-        // Mobile input (touch)
-        self.updateMobile();
+            // Actions - OR keyboard and touch
+            .jump = raw_jump or self.touch.jump,
+            .crouch = raw_crouch or self.touch.crouch,
 
-        // Update just-pressed states with autohop (using raw keyboard state)
-        self.updateJustPressed(io_state, dt, on_ground, keyboard_jump, keyboard_jump_pressed);
+            // Block actions - OR keyboard and touch
+            .break_block = raw_break_block or self.touch.break_block,
+            .place_block = raw_place_block or self.touch.place_block,
+            .pick_block = raw_pick_block,
+
+            // Block selection - keyboard only
+            .prev_block = raw_prev_block,
+            .next_block = raw_next_block,
+
+            // System - keyboard only
+            .escape = raw_escape,
+
+            // Just pressed states with autohop
+            .jump_pressed = self.calculateJumpPressed(raw_jump_pressed, raw_jump, dt, on_ground),
+            .break_pressed = raw_break_pressed or self.touch.break_pressed,
+            .place_pressed = raw_place_pressed or self.touch.place_pressed,
+            .pick_pressed = raw_pick_pressed,
+            .prev_block_pressed = raw_prev_block_pressed,
+            .next_block_pressed = raw_next_block_pressed,
+            .escape_pressed = raw_escape_pressed,
+        };
     }
 
-    fn updateDesktop(self: *Input, io_state: *const io.IO) void {
-        // Movement (WASD)
-        self.state.move = io_state.vec2(.a, .d, .s, .w);
-
-        // Mouse look (when mouse is locked or dragging)
-        if (io_state.mouse.locked() or io_state.mouse.left) {
-            self.state.look.x = io_state.mouse.dx * cfg.mouse_sensitivity;
-            self.state.look.y = io_state.mouse.dy * cfg.mouse_sensitivity;
-        }
-
-        // Actions
-        self.state.jump = io_state.pressed(.space);
-        self.state.crouch = io_state.shift();
-
-        // Block actions
-        self.state.break_block = io_state.pressed(.z);
-        self.state.place_block = io_state.pressed(.x);
-        self.state.pick_block = io_state.pressed(.r);
-
-        // Block selection
-        self.state.prev_block = io_state.pressed(.q);
-        self.state.next_block = io_state.pressed(.e);
-
-        // System
-        self.state.escape = io_state.pressed(.escape);
-    }
-
-    fn updateMobile(self: *Input) void {
-        // Add touch input to existing desktop input (allows hybrid usage)
-        self.state.move.x += self.touch.movement.x;
-        self.state.move.y += self.touch.movement.y;
-
-        self.state.look.x += self.touch.look.x;
-        self.state.look.y += self.touch.look.y;
-
-        self.state.jump = self.state.jump or self.touch.jump;
-        self.state.crouch = self.state.crouch or self.touch.crouch;
-
-        // Touch block actions
-        self.state.break_block = self.state.break_block or self.touch.break_block;
-        self.state.place_block = self.state.place_block or self.touch.place_block;
-    }
-
-    fn updateJustPressed(self: *Input, io_state: *const io.IO, dt: f32, on_ground: bool, keyboard_jump: bool, keyboard_jump_pressed: bool) void {
+    fn calculateJumpPressed(self: *Input, keyboard_jump_pressed: bool, keyboard_jump: bool, dt: f32, on_ground: bool) bool {
         const jump_input = keyboard_jump_pressed or self.touch.jump_pressed;
 
         // Autohop: if holding jump and recently landed, auto-jump
         const holding_jump = keyboard_jump or self.touch.jump;
         const auto_jump = holding_jump and on_ground and self.ground_time < cfg.autohop_window;
 
-        self.state.jump_pressed = jump_input or auto_jump;
+        const result = jump_input or auto_jump;
 
-        if (self.state.jump_pressed) {
+        if (result) {
             self.last_jump_time = 0;
         } else {
             self.last_jump_time += dt;
         }
 
-        self.state.break_pressed = io_state.justPressed(.z) or self.touch.break_pressed;
-        self.state.place_pressed = io_state.justPressed(.x) or self.touch.place_pressed;
-        self.state.pick_pressed = io_state.justPressed(.r);
-        self.state.prev_block_pressed = io_state.justPressed(.q);
-        self.state.next_block_pressed = io_state.justPressed(.e);
-        self.state.escape_pressed = io_state.justPressed(.escape);
+        return result;
     }
 };
 
 pub const TouchInput = struct {
+    pub const cfg = struct {
+        pub const movement_radius = 75.0; // 60.0 * 1.25
+        pub const jump_radius = 50.0; // 40.0 * 1.25
+        pub const crouch_radius = 43.75; // 35.0 * 1.25
+        pub const look_sensitivity = 0.012; // Increased from 0.003
+        pub const movement_deadzone = 0.1;
+    };
+
+    const TouchState = struct {
+        id: usize,
+        start_x: f32,
+        start_y: f32,
+        current_x: f32,
+        current_y: f32,
+    };
+
     // Output state
     movement: Vec2 = .{ .x = 0, .y = 0 },
     look: Vec2 = .{ .x = 0, .y = 0 },
@@ -169,25 +181,15 @@ pub const TouchInput = struct {
     // Internal state
     movement_touch: ?TouchState = null,
     look_touch: ?TouchState = null,
+    jump_touch: ?TouchState = null,
+    crouch_touch: ?TouchState = null,
     prev_jump: bool = false,
     prev_break: bool = false,
     prev_place: bool = false,
 
-    pub const cfg = struct {
-        pub const movement_radius = 60.0;
-        pub const jump_radius = 40.0;
-        pub const crouch_radius = 35.0;
-        pub const look_sensitivity = 0.012; // Increased from 0.003
-        pub const movement_deadzone = 0.1;
-    };
-
-    const TouchState = struct {
-        id: usize,
-        start_x: f32,
-        start_y: f32,
-        current_x: f32,
-        current_y: f32,
-    };
+    // Toggle state for jump button
+    jump_toggled: bool = false,
+    prev_jump_touch_id: ?usize = null,
 
     pub fn update(self: *TouchInput, io_state: *const io.IO) void {
         // Update just-pressed states BEFORE clearing current state
@@ -206,6 +208,8 @@ pub const TouchInput = struct {
         if (io_state.num_touches == 0) {
             self.movement_touch = null;
             self.look_touch = null;
+            self.jump_touch = null;
+            self.crouch_touch = null;
         } else {
             const screen_w = sapp.widthf();
             const screen_h = sapp.heightf();
@@ -221,6 +225,25 @@ pub const TouchInput = struct {
             self.cleanupTouches(io_state);
         }
 
+        // Handle jump toggle logic - detect NEW jump touches
+        if (self.jump_touch) |jt| {
+            // Check if this is a new touch (different ID from previous)
+            if (self.prev_jump_touch_id == null or self.prev_jump_touch_id.? != jt.id) {
+                // New jump touch detected - toggle the jump state
+                self.jump_toggled = !self.jump_toggled;
+                self.prev_jump_touch_id = jt.id;
+            }
+        } else {
+            // No jump touch - clear the previous ID
+            self.prev_jump_touch_id = null;
+        }
+
+        // Set jump state based on toggle
+        self.jump = self.jump_toggled;
+
+        // Handle crouch (still hold-to-crouch)
+        if (self.crouch_touch != null) self.crouch = true;
+
         // Update just-pressed states after processing touches
         self.jump_pressed = self.jump and !prev_jump;
         self.break_pressed = self.break_block and !prev_break;
@@ -231,7 +254,7 @@ pub const TouchInput = struct {
         const x = touch.x;
         const y = touch.y;
 
-        // Check if this is an existing touch
+        // Check if this is an existing touch and update it
         if (self.movement_touch) |*mt| {
             if (mt.id == touch.id) {
                 mt.current_x = x;
@@ -253,6 +276,24 @@ pub const TouchInput = struct {
             }
         }
 
+        if (self.jump_touch) |*jt| {
+            if (jt.id == touch.id) {
+                jt.current_x = x;
+                jt.current_y = y;
+                // Jump button is active as long as touch exists
+                return;
+            }
+        }
+
+        if (self.crouch_touch) |*ct| {
+            if (ct.id == touch.id) {
+                ct.current_x = x;
+                ct.current_y = y;
+                // Crouch button is active as long as touch exists
+                return;
+            }
+        }
+
         // New touch - determine what it controls
         if (self.isInMovementArea(x, y, screen_w, screen_h)) {
             if (self.movement_touch == null) {
@@ -265,9 +306,27 @@ pub const TouchInput = struct {
                 };
             }
         } else if (self.isInJumpArea(x, y, screen_w, screen_h)) {
-            self.jump = true;
+            if (self.jump_touch == null) {
+                self.jump_touch = TouchState{
+                    .id = touch.id,
+                    .start_x = x,
+                    .start_y = y,
+                    .current_x = x,
+                    .current_y = y,
+                };
+                // Don't set jump here - let the toggle logic handle it
+            }
         } else if (self.isInCrouchArea(x, y, screen_w, screen_h)) {
-            self.crouch = true;
+            if (self.crouch_touch == null) {
+                self.crouch_touch = TouchState{
+                    .id = touch.id,
+                    .start_x = x,
+                    .start_y = y,
+                    .current_x = x,
+                    .current_y = y,
+                };
+                self.crouch = true;
+            }
         } else if (self.isInLookArea(x, y, screen_w, screen_h)) {
             if (self.look_touch == null) {
                 self.look_touch = TouchState{
@@ -297,7 +356,23 @@ pub const TouchInput = struct {
     }
 
     fn cleanupTouches(self: *TouchInput, io_state: *const io.IO) void {
-        // Check if movement touch still exists
+        // Only clean up touches when there are NO touches at all
+        // This is because stationary touches might not be reported in the touch array
+        // but they're still active until explicitly ended
+        if (io_state.num_touches == 0) {
+            self.movement_touch = null;
+            self.look_touch = null;
+            self.jump_touch = null;
+            self.crouch_touch = null;
+            self.prev_jump_touch_id = null; // Clear previous touch ID when all touches end
+            return;
+        }
+
+        // For individual touch cleanup, only remove if we're sure it's gone
+        // We'll be more conservative here and only clean up if the touch ID
+        // is explicitly not found AND we have other active touches
+        // (meaning the system is still reporting touches, just not this one)
+
         if (self.movement_touch) |mt| {
             var found = false;
             for (0..io_state.num_touches) |i| {
@@ -308,10 +383,10 @@ pub const TouchInput = struct {
                     }
                 }
             }
-            if (!found) self.movement_touch = null;
+            // Only remove if not found AND we have other touches being reported
+            if (!found and io_state.num_touches > 0) self.movement_touch = null;
         }
 
-        // Check if look touch still exists
         if (self.look_touch) |lt| {
             var found = false;
             for (0..io_state.num_touches) |i| {
@@ -322,7 +397,36 @@ pub const TouchInput = struct {
                     }
                 }
             }
-            if (!found) self.look_touch = null;
+            if (!found and io_state.num_touches > 0) self.look_touch = null;
+        }
+
+        if (self.jump_touch) |jt| {
+            var found = false;
+            for (0..io_state.num_touches) |i| {
+                if (io_state.getTouch(i)) |touch| {
+                    if (touch.id == jt.id) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found and io_state.num_touches > 0) {
+                self.jump_touch = null;
+                // prev_jump_touch_id will be cleared in the main update logic
+            }
+        }
+
+        if (self.crouch_touch) |ct| {
+            var found = false;
+            for (0..io_state.num_touches) |i| {
+                if (io_state.getTouch(i)) |touch| {
+                    if (touch.id == ct.id) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found and io_state.num_touches > 0) self.crouch_touch = null;
         }
     }
 
