@@ -112,3 +112,8 @@ export fn event(e: [*c]const sapp.Event) void {
 pub fn main() void {
     sapp.run(.{ .init_cb = init, .frame_cb = frame, .cleanup_cb = cleanup, .event_cb = event, .width = 800, .height = 600, .sample_count = 4, .icon = .{ .sokol_default = true }, .window_title = "Voxels", .html5_canvas_selector = "canvas", .html5_ask_leave_site = false, .logger = .{ .func = sokol.log.func } });
 }
+
+// JS API
+export fn map() usize {
+    return @intFromPtr(&game.world.blocks);
+}
