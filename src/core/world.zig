@@ -42,13 +42,13 @@ pub const Map = struct {
     }
 
     pub fn save(w: *const Map) void {
-        const file = std.fs.cwd().createFile("/world.dat", .{}) catch return;
+        const file = std.fs.cwd().createFile("world.dat", .{}) catch return;
         defer file.close();
         _ = file.writeAll(std.mem.asBytes(&w.blocks)) catch {};
     }
 
     pub fn load() Map {
-        const file = std.fs.cwd().openFile("/world.dat", .{}) catch return Map.init();
+        const file = std.fs.cwd().openFile("world.dat", .{}) catch return Map.init();
         defer file.close();
         var w = Map{ .blocks = undefined };
         _ = file.readAll(std.mem.asBytes(&w.blocks)) catch return Map.init();
