@@ -42,7 +42,7 @@ pub const Map = struct {
     }
 
     pub fn save(w: *const Map) void {
-        const file = std.fs.cwd().createFile("world.dat", .{}) catch return;
+        const file = std.fs.cwd().createFile("/world.dat", .{}) catch return;
         defer file.close();
 
         // RLE compress the blocks
@@ -82,7 +82,7 @@ pub const Map = struct {
     }
 
     pub fn load() Map {
-        const file = std.fs.cwd().openFile("world.dat", .{}) catch return Map.init();
+        const file = std.fs.cwd().openFile("/world.dat", .{}) catch return Map.init();
         defer file.close();
 
         // Read compressed data
