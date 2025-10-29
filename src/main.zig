@@ -24,7 +24,9 @@ var verts: [65536]Vertex = undefined;
 var indices: [98304]u16 = undefined;
 const sky = [4]f32{ 0, 0, 0, 1 };
 
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+// Static buffer for allocations
+var static_buffer: [1024 * 1024]u8 = undefined; // 1MB buffer
+var static_allocator = std.heap.FixedBufferAllocator.init(&static_buffer);
 
 // Global writer buffer for JSON operations
 var writer_buffer: [4096]u8 = undefined;
@@ -47,7 +49,7 @@ pub const Game = struct {
         const sh_desc = shader.cubeShaderDesc(sokol.gfx.queryBackend());
         const sh = sokol.gfx.makeShader(sh_desc);
 
-        const allocator = gpa.allocator();
+        const allocator = static_allocator.allocator();
 
         var g = Game{
             .player = Player.init(),
@@ -118,7 +120,7 @@ pub const Game = struct {
         simgui.shutdown();
         sokol.gfx.shutdown();
         audio.Audio.deinit(); // Deinit audio last
-        _ = gpa.deinit();
+        // StaticBufferAllocator doesn't need explicit deinitialization
     }
 };
 
