@@ -49,7 +49,7 @@ fn buildWeb(b: *Build, opts: Opts) !void {
     opts.dep_cimgui.artifact(opts.cimgui_clib_name).addSystemIncludePath(emsdk_incl_path);
     opts.dep_cimgui.artifact(opts.cimgui_clib_name).step.dependOn(&opts.dep_sokol.artifact("sokol_clib").step);
 
-    const link_step = try sokol.emLinkStep(b, .{ .lib_main = lib, .target = opts.mod.resolved_target.?, .optimize = opts.mod.optimize.?, .emsdk = emsdk, .use_webgl2 = true, .use_emmalloc = false, .use_filesystem = true, .shell_file_path = opts.dep_sokol.path("src/sokol/web/shell.html"), .extra_args = &.{ "-sEXPORTED_RUNTIME_METHODS=['FS']", "-sEXPORTED_FUNCTIONS=['_main']", "-sFORCE_FILESYSTEM=1" } });
+    const link_step = try sokol.emLinkStep(b, .{ .lib_main = lib, .target = opts.mod.resolved_target.?, .optimize = opts.mod.optimize.?, .emsdk = emsdk, .use_webgl2 = true, .use_emmalloc = false, .use_filesystem = true, .shell_file_path = opts.dep_sokol.path("src/sokol/web/shell.html"), .extra_args = &.{ "-sEXIT_RUNTIME=1", "-sEXPORTED_RUNTIME_METHODS=['FS']", "-sEXPORTED_FUNCTIONS=['_main']", "-sFORCE_FILESYSTEM=1" } });
     b.getInstallStep().dependOn(&link_step.step);
     const run = sokol.emRunStep(b, .{ .name = "voxels", .emsdk = emsdk });
     run.step.dependOn(&link_step.step);
