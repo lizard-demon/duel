@@ -79,7 +79,7 @@ pub const Game = struct {
                 break :blk changed;
             },
             .speedrun => blk: {
-                _ = player.Input.tick(&g.player, &g.world, dt, false);
+                _ = player.Input.tickSpeedrun(&g.player, &g.world, dt);
                 Player.update.phys(&g.player, &g.world, dt);
                 break :blk false;
             },
@@ -97,7 +97,8 @@ pub const Game = struct {
             false => {
                 // Just draw
                 simgui.newFrame(.{ .width = sapp.width(), .height = sapp.height(), .delta_time = sapp.frameDuration(), .dpi_scale = sapp.dpiScale() });
-                gfx.UI.render(g.player.block, &g.player.input);
+                const speedrun_time: ?f32 = if (g.state.config.local.state == .speedrun) g.player.getSpeedrunTime() else null;
+                gfx.UI.render(g.player.block, &g.player.input, speedrun_time);
                 const mvp = Mat4.mul(math.perspective(90, sapp.widthf() / sapp.heightf(), 0.1, 1000), g.player.view());
                 sokol.gfx.beginPass(.{ .action = g.vox.pass, .swapchain = sokol.glue.swapchain() });
                 g.vox.draw(mvp);

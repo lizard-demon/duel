@@ -31,6 +31,7 @@ pub const InputState = struct {
 
     // System
     escape: bool = false,
+    restart: bool = false,
 
     // Just pressed states for single-frame actions
     jump_pressed: bool = false,
@@ -40,6 +41,7 @@ pub const InputState = struct {
     prev_block_pressed: bool = false,
     next_block_pressed: bool = false,
     escape_pressed: bool = false,
+    restart_pressed: bool = false,
 };
 
 pub const Input = struct {
@@ -87,6 +89,8 @@ pub const Input = struct {
         const raw_prev_block_pressed = io_state.justPressed(.q);
         const raw_next_block_pressed = io_state.justPressed(.e);
         const raw_escape_pressed = io_state.justPressed(.escape);
+        const raw_restart = io_state.pressed(.r);
+        const raw_restart_pressed = io_state.justPressed(.r);
 
         // Now build the final state by combining raw input with touch
         self.state = InputState{
@@ -117,6 +121,7 @@ pub const Input = struct {
 
             // System - keyboard only
             .escape = raw_escape,
+            .restart = raw_restart,
 
             // Just pressed states with autohop
             .jump_pressed = self.calculateJumpPressed(raw_jump_pressed, raw_jump, dt, on_ground),
@@ -126,6 +131,7 @@ pub const Input = struct {
             .prev_block_pressed = raw_prev_block_pressed,
             .next_block_pressed = raw_next_block_pressed,
             .escape_pressed = raw_escape_pressed,
+            .restart_pressed = raw_restart_pressed,
         };
     }
 

@@ -81,7 +81,7 @@ pub const Player = struct {
     pub fn getSpeedrunTime(p: *const Player) f32 {
         const current_time = stime.now();
         const elapsed_ticks = stime.diff(current_time, p.spawn_time);
-        return stime.sec(elapsed_ticks);
+        return @floatCast(stime.sec(elapsed_ticks));
     }
 
     pub inline fn lookdir(yaw: f32, pitch: f32) Vec3 {
@@ -165,11 +165,9 @@ pub const Player = struct {
                 // Player wins! Calculate time taken
                 const win_time = stime.now();
                 const elapsed_ticks = stime.diff(win_time, p.spawn_time);
-                const elapsed_seconds = stime.sec(elapsed_ticks);
+                const elapsed_seconds = @as(f32, @floatCast(stime.sec(elapsed_ticks)));
 
                 std.debug.print("🎉 Victory! Time to reach y={d}: {d:.3} seconds\n", .{ cfg.succeed_y, elapsed_seconds });
-
-                // TODO: Submit time to state system leaderboard
 
                 // Reset to spawn for another attempt
                 const new_player = Player.spawn(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z);
@@ -220,6 +218,22 @@ pub const Input = struct {
         handle.mouse(player_ptr, input_state);
 
         return world_changed;
+    }
+
+    pub fn tickSpeedrun(player_ptr: *Player, world_map: *Map, dt: f32) void {
+        // Update unified input system with ground state for autohop
+        player_ptr.input.update(&player_ptr.io, dt, player_ptr.ground);
+        const input_state = &player_ptr.input.state;
+
+        // Handle movement and camera only in speedrun mode
+        handle.movement(player_ptr, dt, input_state);
+        handle.crouch(player_ptr, world_map, input_state);
+        handle.jump(player_ptr, input_state);
+        handle.camera(player_ptr, input_state);
+        handle.mouse(player_ptr, input_state);
+
+        // Handle restart with R key
+        handle.restart(player_ptr, input_state);
     }
 
     const handle = struct {
@@ -325,6 +339,20 @@ pub const Input = struct {
 
         pub fn mouse(p: *Player, input_state: *const input.InputState) void {
             if (input_state.escape_pressed) p.io.mouse.unlock();
+        }
+
+        pub fn restart(p: *Player, input_state: *const input.InputState) void {
+            if (input_state.restart_pressed) {
+                const new_player = Player.spawn(Player.cfg.spawn.x, Player.cfg.spawn.y, Player.cfg.spawn.z);
+                p.pos = new_player.pos;
+                p.vel = new_player.vel;
+                p.yaw = new_player.yaw;
+                p.pitch = new_player.pitch;
+                p.ground = new_player.ground;
+                p.prev_ground = new_player.prev_ground;
+                p.crouch = new_player.crouch;
+                p.spawn_time = new_player.spawn_time;
+            }
         }
     };
 };
