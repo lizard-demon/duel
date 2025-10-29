@@ -82,6 +82,32 @@ pub const Player = struct {
         return @floatCast(stime.sec(elapsed_ticks));
     }
 
+    pub fn checkSpeedrunVictory(p: *Player, state_ptr: *@import("state.zig").State) void {
+        if (p.pos.data[1] > cfg.succeed_y) {
+            // Player wins! Calculate time taken
+            const final_time = p.getSpeedrunTime();
+
+            // Update leaderboard if we have a username
+            if (state_ptr.config.local.player.username.len > 0) {
+                _ = state_ptr.updateLeaderboard(state_ptr.config.local.player.username, final_time) catch false;
+                // Always show leaderboard when completing a run
+                state_ptr.show_leaderboard = true;
+                state_ptr.last_run_time = final_time;
+            }
+
+            // Reset to spawn for another attempt
+            const new_player = Player.spawn(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z);
+            p.pos = new_player.pos;
+            p.vel = new_player.vel;
+            p.yaw = new_player.yaw;
+            p.pitch = new_player.pitch;
+            p.ground = new_player.ground;
+            p.prev_ground = new_player.prev_ground;
+            p.crouch = new_player.crouch;
+            p.spawn_time = new_player.spawn_time;
+        }
+    }
+
     pub inline fn lookdir(yaw: f32, pitch: f32) Vec3 {
         return Vec3.new(@sin(yaw) * @cos(pitch), -@sin(pitch), -@cos(yaw) * @cos(pitch));
     }
@@ -158,26 +184,6 @@ pub const Player = struct {
                 p.crouch = new_player.crouch;
                 p.spawn_time = new_player.spawn_time;
             }
-
-            if (p.pos.data[1] > cfg.succeed_y) {
-                // Player wins! Calculate time taken
-                const win_time = stime.now();
-                const elapsed_ticks = stime.diff(win_time, p.spawn_time);
-                const elapsed_seconds = @as(f32, @floatCast(stime.sec(elapsed_ticks)));
-
-                std.debug.print("🎉 Victory! Time to reach y={d}: {d:.3} seconds\n", .{ cfg.succeed_y, elapsed_seconds });
-
-                // Reset to spawn for another attempt
-                const new_player = Player.spawn(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z);
-                p.pos = new_player.pos;
-                p.vel = new_player.vel;
-                p.yaw = new_player.yaw;
-                p.pitch = new_player.pitch;
-                p.ground = new_player.ground;
-                p.prev_ground = new_player.prev_ground;
-                p.crouch = new_player.crouch;
-                p.spawn_time = new_player.spawn_time;
-            }
         }
 
         pub fn friction(p: *Player, dt: f32) void {
@@ -218,7 +224,7 @@ pub const Input = struct {
         return world_changed;
     }
 
-    pub fn tickSpeedrun(player_ptr: *Player, world_map: *Map, dt: f32) void {
+    pub fn tickSpeedrun(player_ptr: *Player, world_map: *Map, dt: f32, state_ptr: *@import("state.zig").State) void {
         // Update unified input system with ground state for autohop
         player_ptr.input.update(dt, player_ptr.ground);
         const input_state = &player_ptr.input;
@@ -230,8 +236,8 @@ pub const Input = struct {
         handle.camera(player_ptr, input_state);
         handle.mouse(player_ptr, input_state);
 
-        // Handle restart with R key
-        handle.restart(player_ptr, input_state);
+        // Handle restart with R key - now with leaderboard support
+        handle.restart(player_ptr, input_state, state_ptr);
     }
 
     const handle = struct {
@@ -341,8 +347,21 @@ pub const Input = struct {
             }
         }
 
-        pub fn restart(p: *Player, input_state: *const input.Input) void {
+        pub fn restart(p: *Player, input_state: *const input.Input, state_ptr: *@import("state.zig").State) void {
             if (input_state.restart_pressed) {
+                // Calculate final time for this run
+                const final_time = p.getSpeedrunTime();
+
+                // Manual restart - only update leaderboard if the run was longer than 1 second
+                if (final_time > 1.0 and state_ptr.config.local.player.username.len > 0) {
+                    const updated = state_ptr.updateLeaderboard(state_ptr.config.local.player.username, final_time) catch false;
+                    if (updated) {
+                        state_ptr.show_leaderboard = true;
+                        state_ptr.last_run_time = final_time;
+                    }
+                }
+
+                // Reset player to spawn
                 const new_player = Player.spawn(Player.cfg.spawn.x, Player.cfg.spawn.y, Player.cfg.spawn.z);
                 p.pos = new_player.pos;
                 p.vel = new_player.vel;

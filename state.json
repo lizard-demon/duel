@@ -7,15 +7,19 @@
   },
   "leaderboard": [
     {
-      "username": "SpeedRunner1",
+      "username": "TestPlayer123",
+      "time": 601.943
+    },
+    {
+      "username": "������������",
       "time": 42.5
     },
     {
-      "username": "FastGamer",
+      "username": "���������",
       "time": 58.2
     },
     {
-      "username": "QuickBuild",
+      "username": "����������",
       "time": 61.7
     }
   ],

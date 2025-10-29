@@ -18,11 +18,13 @@ pub const State = struct {
     config: Config,
     allocator: std.mem.Allocator,
     parsed: ?std.json.Parsed(Config),
+    show_leaderboard: bool = false,
+    last_run_time: f32 = 0,
 
     pub fn init(allocator: std.mem.Allocator) State {
         return .{
             .config = .{
-                .local = .{ .player = .{ .username = "" }, .state = .build },
+                .local = .{ .player = .{ .username = "Player" }, .state = .build },
                 .leaderboard = &.{},
                 .data = "",
             },
@@ -155,6 +157,94 @@ pub const State = struct {
                 block_pos += 1;
             }
         }
+    }
+
+    // Add or update leaderboard entry
+    pub fn updateLeaderboard(self: *State, username: []const u8, time: f32) !bool {
+        const max_entries = 100;
+
+        // Check if user already exists on leaderboard
+        for (self.config.leaderboard, 0..) |entry, i| {
+            if (std.mem.eql(u8, entry.username, username)) {
+                // Update existing entry if new time is better
+                if (time < entry.time) {
+                    self.config.leaderboard[i].time = time;
+                    self.sortLeaderboard();
+                    return true;
+                }
+                return false; // Time wasn't better
+            }
+        }
+
+        // Check if leaderboard is full and time doesn't qualify
+        if (self.config.leaderboard.len >= max_entries) {
+            if (time >= self.config.leaderboard[self.config.leaderboard.len - 1].time) {
+                return false; // Time doesn't qualify for top 100
+            }
+        }
+
+        // Simple approach: recreate the entire leaderboard array
+        const new_size = @min(self.config.leaderboard.len + 1, max_entries);
+        const new_leaderboard = try self.allocator.alloc(@TypeOf(self.config.leaderboard[0]), new_size);
+
+        // Copy existing entries
+        var copied: usize = 0;
+        for (self.config.leaderboard) |entry| {
+            if (copied < new_size - 1) { // Leave space for new entry
+                const username_copy = try self.allocator.dupe(u8, entry.username);
+                new_leaderboard[copied] = .{ .username = username_copy, .time = entry.time };
+                copied += 1;
+            }
+        }
+
+        // Add new entry
+        const username_copy = try self.allocator.dupe(u8, username);
+        new_leaderboard[copied] = .{ .username = username_copy, .time = time };
+
+        // Free old leaderboard
+        for (self.config.leaderboard) |entry| {
+            self.allocator.free(@constCast(entry.username));
+        }
+        if (self.config.leaderboard.len > 0) {
+            self.allocator.free(self.config.leaderboard);
+        }
+
+        // Update config
+        self.config.leaderboard = new_leaderboard;
+        self.sortLeaderboard();
+        return true;
+    }
+
+    // Sort leaderboard by time (ascending)
+    fn sortLeaderboard(self: *State) void {
+        const Entry = @TypeOf(self.config.leaderboard[0]);
+        const lessThan = struct {
+            fn lessThan(_: void, a: Entry, b: Entry) bool {
+                return a.time < b.time;
+            }
+        }.lessThan;
+
+        std.mem.sort(Entry, self.config.leaderboard, {}, lessThan);
+    }
+
+    // Get user's rank on leaderboard (1-based, 0 if not found)
+    pub fn getUserRank(self: *const State, username: []const u8) usize {
+        for (self.config.leaderboard, 0..) |entry, i| {
+            if (std.mem.eql(u8, entry.username, username)) {
+                return i + 1;
+            }
+        }
+        return 0;
+    }
+
+    // Get user's best time (0 if not found)
+    pub fn getUserBestTime(self: *const State, username: []const u8) f32 {
+        for (self.config.leaderboard) |entry| {
+            if (std.mem.eql(u8, entry.username, username)) {
+                return entry.time;
+            }
+        }
+        return 0;
     }
 
     // Save world data from Map into state

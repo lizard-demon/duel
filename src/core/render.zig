@@ -85,11 +85,7 @@ pub const UI = struct {
                     const timer_x = cfg.hud_x + 8;
                     const timer_y = cfg.hud_y + 8;
 
-                    // Timer background
-                    const bg_color = ig.igColorConvertFloat4ToU32(.{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.6 });
-                    ig.ImDrawList_AddRectFilled(dl, .{ .x = timer_x - 4, .y = timer_y - 2 }, .{ .x = timer_x + 100, .y = timer_y + 40 }, bg_color);
-
-                    // Timer text
+                    // Timer text (no background)
                     const timer_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 0.2, .w = 1.0 });
                     var time_buf: [32]u8 = undefined;
                     const time_str = std.fmt.bufPrintZ(&time_buf, "{d:.2}s", .{time}) catch "0.00s";
@@ -131,11 +127,78 @@ pub const UI = struct {
         pub fn touchControls(input_system: *const input.Input) void {
             input_system.ui.render(input_system);
         }
+
+        pub fn leaderboard(state_ptr: *@import("state.zig").State) bool {
+            const window_width = 400.0;
+            const window_height = 500.0;
+            const center_x = @as(f32, @floatFromInt(sapp.width())) / 2.0 - window_width / 2.0;
+            const center_y = @as(f32, @floatFromInt(sapp.height())) / 2.0 - window_height / 2.0;
+
+            ig.igSetNextWindowPos(.{ .x = center_x, .y = center_y }, ig.ImGuiCond_Always);
+            ig.igSetNextWindowSize(.{ .x = window_width, .y = window_height }, ig.ImGuiCond_Always);
+
+            const window_flags = ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoCollapse;
+            if (ig.igBegin("Speedrun Leaderboard", null, window_flags)) {
+                // Show last run time
+                if (state_ptr.last_run_time > 0) {
+                    var time_buf: [64]u8 = undefined;
+                    const time_str = std.fmt.bufPrintZ(&time_buf, "Your time: {d:.2}s", .{state_ptr.last_run_time}) catch "Your time: 0.00s";
+                    ig.igText(time_str.ptr);
+                    ig.igSeparator();
+                }
+
+                // Show user's rank and best time
+                if (state_ptr.config.local.player.username.len > 0) {
+                    const rank = state_ptr.getUserRank(state_ptr.config.local.player.username);
+                    const best_time = state_ptr.getUserBestTime(state_ptr.config.local.player.username);
+
+                    if (rank > 0) {
+                        var rank_buf: [64]u8 = undefined;
+                        const rank_str = std.fmt.bufPrintZ(&rank_buf, "Your rank: #{d} (Best: {d:.2}s)", .{ rank, best_time }) catch "Your rank: N/A";
+                        ig.igText(rank_str.ptr);
+                    } else {
+                        ig.igText("Not on leaderboard yet");
+                    }
+                    ig.igSeparator();
+                }
+
+                // Show top entries
+                ig.igText("Top Times:");
+                ig.igSeparator();
+
+                const max_display = @min(state_ptr.config.leaderboard.len, 20); // Show top 20
+                for (state_ptr.config.leaderboard[0..max_display], 0..) |entry, i| {
+                    // Mark current user with an arrow
+                    const is_current_user = std.mem.eql(u8, entry.username, state_ptr.config.local.player.username);
+                    const marker = if (is_current_user) ">" else " ";
+
+                    var entry_buf: [128]u8 = undefined;
+                    const entry_str = std.fmt.bufPrintZ(&entry_buf, "{s}#{d:2}  {s:<20} {d:6.2}s", .{ marker, i + 1, entry.username, entry.time }) catch "Error";
+                    ig.igText(entry_str.ptr);
+                }
+                ig.igSeparator();
+
+                // Close button
+                if (ig.igButton("Close (R to restart)")) {
+                    ig.igEnd();
+                    return true; // Signal to close leaderboard
+                }
+            }
+            ig.igEnd();
+            return false; // Keep leaderboard open
+        }
     };
 
-    pub inline fn render(block: world.Block, input_system: *const input.Input, speedrun_time: ?f32) void {
+    pub inline fn render(block: world.Block, input_system: *const input.Input, speedrun_time: ?f32, state_ptr: *@import("state.zig").State) void {
         draw.crosshair();
         draw.hud(block, speedrun_time);
         draw.touchControls(input_system);
+
+        // Show leaderboard if requested
+        if (state_ptr.show_leaderboard) {
+            if (draw.leaderboard(state_ptr)) {
+                state_ptr.show_leaderboard = false;
+            }
+        }
     }
 };

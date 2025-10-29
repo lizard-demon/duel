@@ -73,6 +73,11 @@ pub const Game = struct {
     fn run(g: *Game) void {
         const dt = @as(f32, @floatCast(sapp.frameDuration()));
 
+        // Handle leaderboard closing
+        if (g.state.show_leaderboard and g.player.input.restart_pressed) {
+            g.state.show_leaderboard = false;
+        }
+
         // State machine tick based on current mode
         const world_changed = switch (g.state.config.local.state) {
             .build => blk: {
@@ -81,8 +86,9 @@ pub const Game = struct {
                 break :blk changed;
             },
             .speedrun => blk: {
-                _ = player.Input.tickSpeedrun(&g.player, &g.world, dt);
+                _ = player.Input.tickSpeedrun(&g.player, &g.world, dt, &g.state);
                 Player.update.phys(&g.player, &g.world, dt);
+                Player.checkSpeedrunVictory(&g.player, &g.state);
                 break :blk false;
             },
         };
@@ -100,7 +106,7 @@ pub const Game = struct {
                 // Just draw
                 simgui.newFrame(.{ .width = sapp.width(), .height = sapp.height(), .delta_time = sapp.frameDuration(), .dpi_scale = sapp.dpiScale() });
                 const speedrun_time: ?f32 = if (g.state.config.local.state == .speedrun) g.player.getSpeedrunTime() else null;
-                gfx.UI.render(g.player.block, &g.player.input, speedrun_time);
+                gfx.UI.render(g.player.block, &g.player.input, speedrun_time, &g.state);
                 const mvp = Mat4.mul(math.perspective(90, sapp.widthf() / sapp.heightf(), 0.1, 1000), g.player.view());
                 sokol.gfx.beginPass(.{ .action = g.vox.pass, .swapchain = sokol.glue.swapchain() });
                 g.vox.draw(mvp);
