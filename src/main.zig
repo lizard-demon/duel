@@ -60,10 +60,7 @@ pub const Game = struct {
 
         // Load state and world data
         g.state.load() catch {};
-        g.state.loadWorldData(&g.world) catch {
-            // If no state data, try loading from old world.dat
-            g.world = Map.load();
-        };
+        g.state.loadWorldData(&g.world) catch {};
 
         const r = world.Mesh.build(&g.world, &verts, &indices, world.color);
         g.vox = gfx.pipeline.init(verts[0..r.verts], indices[0..r.indices], sky);
@@ -77,16 +74,14 @@ pub const Game = struct {
         // State machine tick based on current mode
         const world_changed = switch (g.state.config.local.state) {
             .build => blk: {
-                // Build mode: allow block editing
-                const changed = player.Input.tickWithMode(&g.player, &g.world, dt, true);
+                const changed = player.Input.tick(&g.player, &g.world, dt, true);
                 Player.update.phys(&g.player, &g.world, dt);
                 break :blk changed;
             },
             .speedrun => blk: {
-                // Speedrun mode: movement only, no block editing
-                _ = player.Input.tickWithMode(&g.player, &g.world, dt, false);
+                _ = player.Input.tick(&g.player, &g.world, dt, false);
                 Player.update.phys(&g.player, &g.world, dt);
-                break :blk false; // Never rebuild mesh in speedrun mode
+                break :blk false;
             },
         };
 

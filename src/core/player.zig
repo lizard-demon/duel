@@ -205,11 +205,7 @@ pub const Input = struct {
         const reach = 10.0;
     };
 
-    pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32) bool {
-        return tickWithMode(player_ptr, world_map, dt, true);
-    }
-
-    pub fn tickWithMode(player_ptr: *Player, world_map: *Map, dt: f32, allow_block_editing: bool) bool {
+    pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32, allow_block_editing: bool) bool {
         // Update unified input system with ground state for autohop
         player_ptr.input.update(&player_ptr.io, dt, player_ptr.ground);
         const input_state = &player_ptr.input.state;
