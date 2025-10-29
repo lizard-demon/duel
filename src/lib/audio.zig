@@ -15,18 +15,20 @@ pub const Audio = struct {
     }
 
     pub fn deinit() void {
+        shutdown = true;
         if (saudio.isvalid()) saudio.shutdown();
     }
 
     pub fn playJumpSound() void {
-        if (saudio.isvalid()) jump_trigger = true;
+        if (!shutdown and saudio.isvalid()) jump_trigger = true;
     }
 
     pub fn playLandSound() void {
-        if (saudio.isvalid()) land_trigger = true;
+        if (!shutdown and saudio.isvalid()) land_trigger = true;
     }
 };
 
+var shutdown: bool = false;
 var jump_trigger: bool = false;
 var jump_time: f32 = 0;
 var jump_phase: f32 = 0;
@@ -35,9 +37,15 @@ var land_time: f32 = 0;
 var land_phase: f32 = 0;
 
 fn callback(buffer: [*c]f32, num_frames: i32, num_channels: i32) callconv(.c) void {
+    if (shutdown) {
+        const total_samples = @as(usize, @intCast(num_frames * num_channels));
+        @memset(buffer[0..total_samples], 0.0);
+        return;
+    }
+
     const frames = @as(usize, @intCast(num_frames));
     const channels = @as(usize, @intCast(num_channels));
-    const sample_rate = @as(f32, @floatFromInt(saudio.sampleRate()));
+    const sample_rate: f32 = 44100.0;
 
     for (0..frames) |i| {
         var sample: f32 = 0;
