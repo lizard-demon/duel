@@ -11,6 +11,7 @@ const audio = @import("lib/audio.zig");
 const world = @import("core/world.zig");
 const gfx = @import("core/render.zig");
 const player = @import("core/player.zig");
+const state = @import("core/state.zig");
 const shader = @import("shaders/cube.glsl.zig");
 
 const Vec3 = math.Vec3;
@@ -23,12 +24,18 @@ var verts: [65536]Vertex = undefined;
 var indices: [98304]u16 = undefined;
 const sky = [4]f32{ 0, 0, 0, 1 };
 
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+
+// Global writer buffer for JSON operations
+var writer_buffer: [4096]u8 = undefined;
+
 pub const Game = struct {
     vox: gfx.pipeline,
     player: Player,
     world: Map,
     cube_shader: sokol.gfx.Shader,
     audio_system: audio.Audio,
+    state: state.State,
 
     fn init() Game {
         sokol.time.setup();
@@ -39,12 +46,23 @@ pub const Game = struct {
 
         const sh_desc = shader.cubeShaderDesc(sokol.gfx.queryBackend());
         const sh = sokol.gfx.makeShader(sh_desc);
+
+        const allocator = gpa.allocator();
+
         var g = Game{
             .player = Player.init(),
-            .world = Map.load(),
+            .world = Map.init(), // Start with empty world
             .vox = undefined,
             .cube_shader = sh,
             .audio_system = audio_system,
+            .state = state.State.init(allocator),
+        };
+
+        // Load state and world data
+        g.state.load() catch {};
+        g.state.loadWorldData(&g.world) catch {
+            // If no state data, try loading from old world.dat
+            g.world = Map.load();
         };
 
         const r = world.Mesh.build(&g.world, &verts, &indices, world.color);
@@ -56,9 +74,20 @@ pub const Game = struct {
     fn run(g: *Game) void {
         const dt = @as(f32, @floatCast(sapp.frameDuration()));
 
-        // Handle input and physics
-        const world_changed = player.Input.tick(&g.player, &g.world, dt);
-        Player.update.phys(&g.player, &g.world, dt);
+        // State machine tick based on current mode
+        const world_changed = switch (g.state.config.local.state) {
+            .build => blk: {
+                // Build mode: allow block editing
+                const changed = player.Input.tick(&g.player, &g.world, dt);
+                Player.update.phys(&g.player, &g.world, dt);
+                break :blk changed;
+            },
+            .speedrun => blk: {
+                // Speedrun mode: no block editing, just movement
+                Player.update.phys(&g.player, &g.world, dt);
+                break :blk false;
+            },
+        };
 
         frame: switch (world_changed) {
             true => {
@@ -84,12 +113,15 @@ pub const Game = struct {
     }
 
     fn deinit(g: *Game) void {
-        g.world.save();
+        // Save world data to state system
+        g.state.saveWorldData(&g.world) catch {};
+        g.state.deinit(&writer_buffer);
         g.vox.deinit();
         if (g.cube_shader.id != 0) sokol.gfx.destroyShader(g.cube_shader);
-        audio.Audio.deinit();
         simgui.shutdown();
         sokol.gfx.shutdown();
+        audio.Audio.deinit(); // Deinit audio last
+        _ = gpa.deinit();
     }
 };
 

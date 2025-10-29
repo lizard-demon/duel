@@ -7,6 +7,8 @@ pub const Audio = struct {
     initialized: bool = false,
 
     pub fn init() Audio {
+        audio_shutting_down = false;
+
         saudio.setup(.{
             .sample_rate = 44100,
             .num_channels = 2,
@@ -20,21 +22,30 @@ pub const Audio = struct {
     }
 
     pub fn deinit() void {
+        // Set shutdown flag first to prevent any new audio calls
+        audio_shutting_down = true;
+
+        // Now safely shutdown
         if (saudio.isvalid()) {
             saudio.shutdown();
         }
     }
 
     pub fn playJumpSound() void {
-        // Trigger jump sound by setting the jump flag
+        // Don't play if shutting down or audio invalid
+        if (audio_shutting_down or !saudio.isvalid()) return;
         jump_triggered = true;
     }
 
     pub fn playLandSound() void {
-        // Trigger land sound by setting the land flag
+        // Don't play if shutting down or audio invalid
+        if (audio_shutting_down or !saudio.isvalid()) return;
         land_triggered = true;
     }
 };
+
+// Global shutdown flag to prevent audio calls during shutdown
+var audio_shutting_down: bool = false;
 
 // Simple jump sound generation
 var jump_triggered: bool = false;
@@ -54,6 +65,13 @@ const LAND_FREQUENCY_START = 150.0; // Lower frequency
 const LAND_FREQUENCY_END = 80.0; // Even lower
 
 fn audioCallback(buffer: [*c]f32, num_frames: i32, num_channels: i32) callconv(.c) void {
+    // Safety check: if shutting down or audio system is not valid, fill with silence
+    if (audio_shutting_down or !saudio.isvalid()) {
+        const total_samples = @as(usize, @intCast(num_frames * num_channels));
+        @memset(buffer[0..total_samples], 0.0);
+        return;
+    }
+
     const frames = @as(usize, @intCast(num_frames));
     const channels = @as(usize, @intCast(num_channels));
     const sample_rate = @as(f32, @floatFromInt(saudio.sampleRate()));

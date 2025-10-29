@@ -78,6 +78,12 @@ pub const Player = struct {
         return spawn(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z);
     }
 
+    pub fn getSpeedrunTime(p: *const Player) f32 {
+        const current_time = stime.now();
+        const elapsed_ticks = stime.diff(current_time, p.spawn_time);
+        return stime.sec(elapsed_ticks);
+    }
+
     pub inline fn lookdir(yaw: f32, pitch: f32) Vec3 {
         return Vec3.new(@sin(yaw) * @cos(pitch), -@sin(pitch), -@cos(yaw) * @cos(pitch));
     }
@@ -162,6 +168,8 @@ pub const Player = struct {
                 const elapsed_seconds = stime.sec(elapsed_ticks);
 
                 std.debug.print("🎉 Victory! Time to reach y={d}: {d:.3} seconds\n", .{ cfg.succeed_y, elapsed_seconds });
+
+                // TODO: Submit time to state system leaderboard
 
                 // Reset to spawn for another attempt
                 const new_player = Player.spawn(cfg.spawn.x, cfg.spawn.y, cfg.spawn.z);
