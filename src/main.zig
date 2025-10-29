@@ -95,6 +95,10 @@ pub const Game = struct {
 
         frame: switch (world_changed) {
             true => {
+                // Save world data immediately when blocks are changed
+                g.state.saveWorldData(&g.world) catch {};
+                g.state.save(&writer_buffer) catch {};
+
                 // Rebuild mesh and draw
                 g.vox.deinit();
                 const r = world.Mesh.build(&g.world, &verts, &indices, world.color);
