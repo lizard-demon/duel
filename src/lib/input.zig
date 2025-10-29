@@ -1,39 +1,81 @@
-// Unified Input System - Clean, minimal, elegant
+// Elegant unified input system - keyboard, mouse, and touch
 const std = @import("std");
 const sokol = @import("sokol");
 const sapp = sokol.app;
 const ig = @import("cimgui");
-const io = @import("io.zig");
 const math = @import("math.zig");
 
-const Vec2 = io.Vec2;
-const Vec3 = math.Vec3;
+pub const Vec2 = struct { x: f32, y: f32 };
+pub const Vec3 = math.Vec3;
 
-pub const InputState = struct {
-    // Movement
+// Minimal key enum - only what we need
+pub const Key = enum(u16) {
+    a,
+    d,
+    s,
+    w,
+    space,
+    z,
+    x,
+    r,
+    q,
+    e,
+    escape,
+    left_shift,
+    right_shift,
+    left_ctrl,
+    right_ctrl,
+    left_alt,
+    right_alt,
+    none,
+
+    pub fn from(kc: sapp.Keycode) Key {
+        return switch (kc) {
+            .A => .a,
+            .D => .d,
+            .S => .s,
+            .W => .w,
+            .SPACE => .space,
+            .Z => .z,
+            .X => .x,
+            .R => .r,
+            .Q => .q,
+            .E => .e,
+            .ESCAPE => .escape,
+            .LEFT_SHIFT => .left_shift,
+            .RIGHT_SHIFT => .right_shift,
+            .LEFT_CONTROL => .left_ctrl,
+            .RIGHT_CONTROL => .right_ctrl,
+            .LEFT_ALT => .left_alt,
+            .RIGHT_ALT => .right_alt,
+            else => .none,
+        };
+    }
+};
+
+// Core input state
+pub const Input = struct {
+    // Raw input state
+    keys: [32]bool = [_]bool{false} ** 32,
+    keys_prev: [32]bool = [_]bool{false} ** 32,
+    mouse: Mouse = .{},
+    touches: [sapp.max_touchpoints]?Touch = [_]?Touch{null} ** sapp.max_touchpoints,
+    num_touches: usize = 0,
+
+    // Game input state
     move: Vec2 = .{ .x = 0, .y = 0 },
-
-    // Look/Camera
     look: Vec2 = .{ .x = 0, .y = 0 },
-
-    // Actions
     jump: bool = false,
     crouch: bool = false,
-
-    // Block actions
     break_block: bool = false,
     place_block: bool = false,
     pick_block: bool = false,
-
-    // Block selection
     prev_block: bool = false,
     next_block: bool = false,
-
-    // System
     escape: bool = false,
     restart: bool = false,
 
-    // Just pressed states for single-frame actions
+    // Just pressed states
     jump_pressed: bool = false,
     break_pressed: bool = false,
     place_pressed: bool = false,
@@ -42,592 +84,532 @@ pub const InputState = struct {
     next_block_pressed: bool = false,
     escape_pressed: bool = false,
     restart_pressed: bool = false,
-};
 
-pub const Input = struct {
-    state: InputState = .{},
-    touch: TouchInput = .{},
+    // Touch state
+    touch: TouchState = .{},
     ui: TouchUI = .{},
 
-    // Autohop state
-    last_jump_time: f32 = 0,
+    // Autohop
     ground_time: f32 = 0,
 
-    const cfg = struct {
-        const mouse_sensitivity = 0.008; // Increased from 0.002
-        const autohop_window = 0.1; // 100ms window for autohop
-    };
+    const mouse_sens = 0.008;
+    const autohop_window = 0.1;
 
-    pub fn update(self: *Input, io_state: *const io.IO, dt: f32, on_ground: bool) void {
-        // Update autohop timing
-        if (on_ground) {
-            self.ground_time += dt;
-        } else {
-            self.ground_time = 0;
-        }
+    pub fn update(self: *Input, dt: f32, on_ground: bool) void {
+        // Update timing
+        if (on_ground) self.ground_time += dt else self.ground_time = 0;
 
-        // Update touch input first
-        self.touch.update(io_state);
+        // Update touch
+        self.touch.update(self);
         self.ui.update(self, dt);
 
-        // Capture ALL raw input states FIRST before any processing
-        const raw_move = io_state.vec2(.a, .d, .s, .w);
-        const raw_look_x: f32 = if (io_state.mouse.locked() or io_state.mouse.left) io_state.mouse.dx * cfg.mouse_sensitivity else 0;
-        const raw_look_y: f32 = if (io_state.mouse.locked() or io_state.mouse.left) io_state.mouse.dy * cfg.mouse_sensitivity else 0;
-        const raw_jump = io_state.pressed(.space);
-        const raw_crouch = io_state.shift();
-        const raw_break_block = io_state.pressed(.z);
-        const raw_place_block = io_state.pressed(.x);
-        const raw_pick_block = io_state.pressed(.r);
-        const raw_prev_block = io_state.pressed(.q);
-        const raw_next_block = io_state.pressed(.e);
-        const raw_escape = io_state.pressed(.escape);
-        const raw_jump_pressed = io_state.justPressed(.space);
-        const raw_break_pressed = io_state.justPressed(.z);
-        const raw_place_pressed = io_state.justPressed(.x);
-        const raw_pick_pressed = io_state.justPressed(.r);
-        const raw_prev_block_pressed = io_state.justPressed(.q);
-        const raw_next_block_pressed = io_state.justPressed(.e);
-        const raw_escape_pressed = io_state.justPressed(.escape);
-        const raw_restart = io_state.pressed(.r);
-        const raw_restart_pressed = io_state.justPressed(.r);
+        // Combine keyboard + touch input
+        const kb_move = self.vec2(.a, .d, .s, .w);
+        const kb_look_x: f32 = if (self.mouse.locked() or self.mouse.left) self.mouse.dx * mouse_sens else 0;
+        const kb_look_y: f32 = if (self.mouse.locked() or self.mouse.left) self.mouse.dy * mouse_sens else 0;
 
-        // Now build the final state by combining raw input with touch
-        self.state = InputState{
-            // Movement - combine keyboard and touch
-            .move = Vec2{
-                .x = raw_move.x + self.touch.movement.x,
-                .y = raw_move.y + self.touch.movement.y,
-            },
+        self.move = Vec2{ .x = kb_move.x + self.touch.move.x, .y = kb_move.y + self.touch.move.y };
+        self.look = Vec2{ .x = kb_look_x + self.touch.look.x, .y = kb_look_y + self.touch.look.y };
 
-            // Look - combine mouse and touch
-            .look = Vec2{
-                .x = raw_look_x + self.touch.look.x,
-                .y = raw_look_y + self.touch.look.y,
-            },
+        // Actions
+        self.jump = self.pressed(.space) or self.touch.jump;
+        self.crouch = self.shift() or self.touch.crouch;
+        self.break_block = self.pressed(.z) or self.touch.break_block;
+        self.place_block = self.pressed(.x) or self.touch.place_block;
+        self.pick_block = self.pressed(.r);
+        self.prev_block = self.pressed(.q);
+        self.next_block = self.pressed(.e);
+        self.escape = self.pressed(.escape);
+        self.restart = self.pressed(.r);
 
-            // Actions - OR keyboard and touch
-            .jump = raw_jump or self.touch.jump,
-            .crouch = raw_crouch or self.touch.crouch,
+        // Just pressed with autohop
+        const kb_jump_pressed = self.justPressed(.space);
+        const holding_jump = self.pressed(.space) or self.touch.jump;
+        const auto_jump = holding_jump and on_ground and self.ground_time < autohop_window;
 
-            // Block actions - OR keyboard and touch
-            .break_block = raw_break_block or self.touch.break_block,
-            .place_block = raw_place_block or self.touch.place_block,
-            .pick_block = raw_pick_block,
-
-            // Block selection - keyboard only
-            .prev_block = raw_prev_block,
-            .next_block = raw_next_block,
-
-            // System - keyboard only
-            .escape = raw_escape,
-            .restart = raw_restart,
-
-            // Just pressed states with autohop
-            .jump_pressed = self.calculateJumpPressed(raw_jump_pressed, raw_jump, dt, on_ground),
-            .break_pressed = raw_break_pressed or self.touch.break_pressed,
-            .place_pressed = raw_place_pressed or self.touch.place_pressed,
-            .pick_pressed = raw_pick_pressed,
-            .prev_block_pressed = raw_prev_block_pressed,
-            .next_block_pressed = raw_next_block_pressed,
-            .escape_pressed = raw_escape_pressed,
-            .restart_pressed = raw_restart_pressed,
-        };
+        self.jump_pressed = kb_jump_pressed or self.touch.jump_pressed or auto_jump;
+        self.break_pressed = self.justPressed(.z) or self.touch.break_pressed;
+        self.place_pressed = self.justPressed(.x) or self.touch.place_pressed;
+        self.pick_pressed = self.justPressed(.r);
+        self.prev_block_pressed = self.justPressed(.q);
+        self.next_block_pressed = self.justPressed(.e);
+        self.escape_pressed = self.justPressed(.escape);
+        self.restart_pressed = self.justPressed(.r);
     }
 
-    fn calculateJumpPressed(self: *Input, keyboard_jump_pressed: bool, keyboard_jump: bool, dt: f32, on_ground: bool) bool {
-        const jump_input = keyboard_jump_pressed or self.touch.jump_pressed;
-
-        // Autohop: if holding jump and recently landed, auto-jump
-        const holding_jump = keyboard_jump or self.touch.jump;
-        const auto_jump = holding_jump and on_ground and self.ground_time < cfg.autohop_window;
-
-        const result = jump_input or auto_jump;
-
-        if (result) {
-            self.last_jump_time = 0;
-        } else {
-            self.last_jump_time += dt;
+    pub fn tick(self: *Input, ev: [*c]const sapp.Event) void {
+        const e = ev.*;
+        switch (e.type) {
+            .KEY_DOWN => {
+                const k = Key.from(e.key_code);
+                if (k != .none) self.keys[@intFromEnum(k)] = true;
+            },
+            .KEY_UP => {
+                const k = Key.from(e.key_code);
+                if (k != .none) self.keys[@intFromEnum(k)] = false;
+            },
+            .MOUSE_DOWN => switch (e.mouse_button) {
+                .LEFT => self.mouse.left = true,
+                .RIGHT => self.mouse.right = true,
+                .MIDDLE => self.mouse.middle = true,
+                else => {},
+            },
+            .MOUSE_UP => switch (e.mouse_button) {
+                .LEFT => self.mouse.left = false,
+                .RIGHT => self.mouse.right = false,
+                .MIDDLE => self.mouse.middle = false,
+                else => {},
+            },
+            .MOUSE_MOVE => {
+                self.mouse.x = e.mouse_x;
+                self.mouse.y = e.mouse_y;
+                self.mouse.dx += e.mouse_dx;
+                self.mouse.dy += e.mouse_dy;
+            },
+            .MOUSE_SCROLL => {
+                self.mouse.scroll_x += e.scroll_x;
+                self.mouse.scroll_y += e.scroll_y;
+            },
+            .TOUCHES_BEGAN, .TOUCHES_MOVED => {
+                self.num_touches = @intCast(@max(0, @min(e.num_touches, sapp.max_touchpoints)));
+                for (0..self.num_touches) |i| {
+                    const t = e.touches[i];
+                    self.touches[i] = Touch{
+                        .id = t.identifier,
+                        .x = t.pos_x,
+                        .y = t.pos_y,
+                        .changed = t.changed,
+                    };
+                }
+            },
+            .TOUCHES_ENDED, .TOUCHES_CANCELLED => {
+                self.touches = [_]?Touch{null} ** sapp.max_touchpoints;
+                self.num_touches = 0;
+            },
+            else => {},
         }
+    }
 
-        return result;
+    pub fn clean(self: *Input) void {
+        @memcpy(&self.keys_prev, &self.keys);
+        self.mouse.left_prev = self.mouse.left;
+        self.mouse.right_prev = self.mouse.right;
+        self.mouse.dx = 0;
+        self.mouse.dy = 0;
+        self.mouse.scroll_x = 0;
+        self.mouse.scroll_y = 0;
+    }
+
+    // Key queries
+    pub fn pressed(self: *const Input, k: Key) bool {
+        return self.keys[@intFromEnum(k)];
+    }
+
+    pub fn justPressed(self: *const Input, k: Key) bool {
+        const idx = @intFromEnum(k);
+        return self.keys[idx] and !self.keys_prev[idx];
+    }
+
+    pub fn shift(self: *const Input) bool {
+        return self.pressed(.left_shift) or self.pressed(.right_shift);
+    }
+
+    pub fn ctrl(self: *const Input) bool {
+        return self.pressed(.left_ctrl) or self.pressed(.right_ctrl);
+    }
+
+    pub fn alt(self: *const Input) bool {
+        return self.pressed(.left_alt) or self.pressed(.right_alt);
+    }
+
+    pub fn axis(self: *const Input, neg: Key, pos: Key) f32 {
+        return @as(f32, if (self.pressed(pos)) 1 else 0) -
+            @as(f32, if (self.pressed(neg)) 1 else 0);
+    }
+
+    pub fn vec2(self: *const Input, left: Key, right: Key, down: Key, up: Key) Vec2 {
+        return .{ .x = self.axis(left, right), .y = self.axis(down, up) };
+    }
+
+    pub fn getTouch(self: *const Input, idx: usize) ?Touch {
+        if (idx >= sapp.max_touchpoints) return null;
+        return self.touches[idx];
     }
 };
 
-pub const TouchInput = struct {
-    pub const cfg = struct {
-        pub const movement_radius = 75.0; // 60.0 * 1.25
-        pub const jump_radius = 50.0; // 40.0 * 1.25
-        pub const crouch_radius = 43.75; // 35.0 * 1.25
-        pub const look_sensitivity = 0.012; // Increased from 0.003
-        pub const movement_deadzone = 0.1;
-    };
+pub const Mouse = struct {
+    x: f32 = 0,
+    y: f32 = 0,
+    dx: f32 = 0,
+    dy: f32 = 0,
+    scroll_x: f32 = 0,
+    scroll_y: f32 = 0,
+    left: bool = false,
+    right: bool = false,
+    middle: bool = false,
+    left_prev: bool = false,
+    right_prev: bool = false,
 
-    const TouchState = struct {
-        id: usize,
-        start_x: f32,
-        start_y: f32,
-        current_x: f32,
-        current_y: f32,
-    };
+    pub fn lock(_: *Mouse) void {
+        sapp.lockMouse(true);
+    }
+    pub fn unlock(_: *Mouse) void {
+        sapp.lockMouse(false);
+    }
+    pub fn locked(_: *const Mouse) bool {
+        return sapp.mouseLocked();
+    }
+    pub fn toggle(self: *Mouse) void {
+        if (self.locked()) self.unlock() else self.lock();
+    }
+    pub fn rightPressed(self: *const Mouse) bool {
+        return self.right and !self.right_prev;
+    }
+    pub fn leftPressed(self: *const Mouse) bool {
+        return self.left and !self.left_prev;
+    }
+};
 
-    // Output state
-    movement: Vec2 = .{ .x = 0, .y = 0 },
+pub const Touch = struct {
+    id: usize,
+    x: f32,
+    y: f32,
+    changed: bool,
+};
+
+// Touch input handling
+pub const TouchState = struct {
+    move: Vec2 = .{ .x = 0, .y = 0 },
     look: Vec2 = .{ .x = 0, .y = 0 },
     jump: bool = false,
     crouch: bool = false,
     break_block: bool = false,
     place_block: bool = false,
-
-    // Just pressed states
     jump_pressed: bool = false,
     break_pressed: bool = false,
     place_pressed: bool = false,
 
     // Internal state
-    movement_touch: ?TouchState = null,
-    look_touch: ?TouchState = null,
-    jump_touch: ?TouchState = null,
-    crouch_touch: ?TouchState = null,
-    prev_jump: bool = false,
-    prev_break: bool = false,
-    prev_place: bool = false,
-
-    // Toggle state for jump button
+    move_touch: ?TouchData = null,
+    look_touch: ?TouchData = null,
+    jump_touch: ?TouchData = null,
+    crouch_touch: ?TouchData = null,
     jump_toggled: bool = false,
-    prev_jump_touch_id: ?usize = null,
+    prev_jump_id: ?usize = null,
 
-    pub fn update(self: *TouchInput, io_state: *const io.IO) void {
-        // Update just-pressed states BEFORE clearing current state
+    const TouchData = struct { id: usize, start_x: f32, start_y: f32, x: f32, y: f32 };
+    const move_radius = 75.0;
+    const jump_radius = 50.0;
+    const crouch_radius = 44.0;
+    const look_sens = 0.012;
+    const deadzone = 0.1;
+
+    pub fn update(self: *TouchState, input: *const Input) void {
         const prev_jump = self.jump;
         const prev_break = self.break_block;
         const prev_place = self.place_block;
 
-        // Clear current state
-        self.movement = .{ .x = 0, .y = 0 };
+        // Clear state
+        self.move = .{ .x = 0, .y = 0 };
         self.look = .{ .x = 0, .y = 0 };
         self.jump = false;
         self.crouch = false;
         self.break_block = false;
         self.place_block = false;
 
-        if (io_state.num_touches == 0) {
-            self.movement_touch = null;
-            self.look_touch = null;
-            self.jump_touch = null;
-            self.crouch_touch = null;
-        } else {
-            const screen_w = sapp.widthf();
-            const screen_h = sapp.heightf();
-
-            // Process all touches
-            for (0..io_state.num_touches) |i| {
-                if (io_state.getTouch(i)) |touch| {
-                    self.processTouch(touch, screen_w, screen_h);
-                }
-            }
-
-            // Clean up ended touches
-            self.cleanupTouches(io_state);
+        if (input.num_touches == 0) {
+            self.clearTouches();
+            return;
         }
 
-        // Handle jump toggle logic - detect NEW jump touches
+        const w = sapp.widthf();
+        const h = sapp.heightf();
+
+        // Process touches
+        for (0..input.num_touches) |i| {
+            if (input.getTouch(i)) |touch| {
+                self.processTouch(touch, w, h);
+            }
+        }
+
+        self.cleanupTouches(input);
+
+        // Handle jump toggle
         if (self.jump_touch) |jt| {
-            // Check if this is a new touch (different ID from previous)
-            if (self.prev_jump_touch_id == null or self.prev_jump_touch_id.? != jt.id) {
-                // New jump touch detected - toggle the jump state
+            if (self.prev_jump_id == null or self.prev_jump_id.? != jt.id) {
                 self.jump_toggled = !self.jump_toggled;
-                self.prev_jump_touch_id = jt.id;
+                self.prev_jump_id = jt.id;
             }
         } else {
-            // No jump touch - clear the previous ID
-            self.prev_jump_touch_id = null;
+            self.prev_jump_id = null;
         }
 
-        // Set jump state based on toggle
         self.jump = self.jump_toggled;
-
-        // Handle crouch (still hold-to-crouch)
         if (self.crouch_touch != null) self.crouch = true;
 
-        // Update just-pressed states after processing touches
+        // Update pressed states
         self.jump_pressed = self.jump and !prev_jump;
         self.break_pressed = self.break_block and !prev_break;
         self.place_pressed = self.place_block and !prev_place;
     }
 
-    fn processTouch(self: *TouchInput, touch: io.Touch, screen_w: f32, screen_h: f32) void {
-        const x = touch.x;
-        const y = touch.y;
-
-        // Check if this is an existing touch and update it
-        if (self.movement_touch) |*mt| {
+    fn processTouch(self: *TouchState, touch: Touch, w: f32, h: f32) void {
+        // Update existing touches
+        if (self.move_touch) |*mt| {
             if (mt.id == touch.id) {
-                mt.current_x = x;
-                mt.current_y = y;
-                self.updateMovement(mt.*);
+                mt.x = touch.x;
+                mt.y = touch.y;
+                self.updateMove(mt.*);
                 return;
             }
         }
 
         if (self.look_touch) |*lt| {
             if (lt.id == touch.id) {
-                const dx = x - lt.current_x;
-                const dy = y - lt.current_y;
-                self.look.x = dx * cfg.look_sensitivity;
-                self.look.y = dy * cfg.look_sensitivity;
-                lt.current_x = x;
-                lt.current_y = y;
+                const dx = touch.x - lt.x;
+                const dy = touch.y - lt.y;
+                self.look.x = dx * look_sens;
+                self.look.y = dy * look_sens;
+                lt.x = touch.x;
+                lt.y = touch.y;
                 return;
             }
         }
 
         if (self.jump_touch) |*jt| {
             if (jt.id == touch.id) {
-                jt.current_x = x;
-                jt.current_y = y;
-                // Jump button is active as long as touch exists
+                jt.x = touch.x;
+                jt.y = touch.y;
                 return;
             }
         }
 
         if (self.crouch_touch) |*ct| {
             if (ct.id == touch.id) {
-                ct.current_x = x;
-                ct.current_y = y;
-                // Crouch button is active as long as touch exists
+                ct.x = touch.x;
+                ct.y = touch.y;
                 return;
             }
         }
 
-        // New touch - determine what it controls
-        if (self.isInMovementArea(x, y, screen_w, screen_h)) {
-            if (self.movement_touch == null) {
-                self.movement_touch = TouchState{
-                    .id = touch.id,
-                    .start_x = x,
-                    .start_y = y,
-                    .current_x = x,
-                    .current_y = y,
-                };
-            }
-        } else if (self.isInJumpArea(x, y, screen_w, screen_h)) {
-            if (self.jump_touch == null) {
-                self.jump_touch = TouchState{
-                    .id = touch.id,
-                    .start_x = x,
-                    .start_y = y,
-                    .current_x = x,
-                    .current_y = y,
-                };
-                // Don't set jump here - let the toggle logic handle it
-            }
-        } else if (self.isInCrouchArea(x, y, screen_w, screen_h)) {
-            if (self.crouch_touch == null) {
-                self.crouch_touch = TouchState{
-                    .id = touch.id,
-                    .start_x = x,
-                    .start_y = y,
-                    .current_x = x,
-                    .current_y = y,
-                };
-                self.crouch = true;
-            }
-        } else if (self.isInLookArea(x, y, screen_w, screen_h)) {
-            if (self.look_touch == null) {
-                self.look_touch = TouchState{
-                    .id = touch.id,
-                    .start_x = x,
-                    .start_y = y,
-                    .current_x = x,
-                    .current_y = y,
-                };
-            }
+        // New touch
+        if (self.inMoveArea(touch.x, touch.y, w, h) and self.move_touch == null) {
+            self.move_touch = TouchData{ .id = touch.id, .start_x = touch.x, .start_y = touch.y, .x = touch.x, .y = touch.y };
+        } else if (self.inJumpArea(touch.x, touch.y, w, h) and self.jump_touch == null) {
+            self.jump_touch = TouchData{ .id = touch.id, .start_x = touch.x, .start_y = touch.y, .x = touch.x, .y = touch.y };
+        } else if (self.inCrouchArea(touch.x, touch.y, w, h) and self.crouch_touch == null) {
+            self.crouch_touch = TouchData{ .id = touch.id, .start_x = touch.x, .start_y = touch.y, .x = touch.x, .y = touch.y };
+        } else if (self.inLookArea(touch.x, touch.y, w, h) and self.look_touch == null) {
+            self.look_touch = TouchData{ .id = touch.id, .start_x = touch.x, .start_y = touch.y, .x = touch.x, .y = touch.y };
         }
     }
 
-    fn updateMovement(self: *TouchInput, touch_state: TouchState) void {
-        const dx = touch_state.current_x - touch_state.start_x;
-        const dy = touch_state.current_y - touch_state.start_y;
-        const distance = @sqrt(dx * dx + dy * dy);
-
-        if (distance > cfg.movement_deadzone) {
-            const max_distance = cfg.movement_radius;
-            const clamped_distance = @min(distance, max_distance);
-            const normalized_distance = clamped_distance / max_distance;
-
-            self.movement.x = (dx / distance) * normalized_distance;
-            self.movement.y = -(dy / distance) * normalized_distance; // Invert Y for game coordinates
+    fn updateMove(self: *TouchState, td: TouchData) void {
+        const dx = td.x - td.start_x;
+        const dy = td.y - td.start_y;
+        const dist = @sqrt(dx * dx + dy * dy);
+        if (dist > deadzone) {
+            const norm_dist = @min(dist, move_radius) / move_radius;
+            self.move.x = (dx / dist) * norm_dist;
+            self.move.y = -(dy / dist) * norm_dist;
         }
     }
 
-    fn cleanupTouches(self: *TouchInput, io_state: *const io.IO) void {
-        // Only clean up touches when there are NO touches at all
-        // This is because stationary touches might not be reported in the touch array
-        // but they're still active until explicitly ended
-        if (io_state.num_touches == 0) {
-            self.movement_touch = null;
-            self.look_touch = null;
-            self.jump_touch = null;
-            self.crouch_touch = null;
-            self.prev_jump_touch_id = null; // Clear previous touch ID when all touches end
+    fn clearTouches(self: *TouchState) void {
+        self.move_touch = null;
+        self.look_touch = null;
+        self.jump_touch = null;
+        self.crouch_touch = null;
+        self.prev_jump_id = null;
+    }
+
+    fn cleanupTouches(self: *TouchState, input: *const Input) void {
+        if (input.num_touches == 0) {
+            self.clearTouches();
             return;
         }
 
-        // For individual touch cleanup, only remove if we're sure it's gone
-        // We'll be more conservative here and only clean up if the touch ID
-        // is explicitly not found AND we have other active touches
-        // (meaning the system is still reporting touches, just not this one)
-
-        if (self.movement_touch) |mt| {
-            var found = false;
-            for (0..io_state.num_touches) |i| {
-                if (io_state.getTouch(i)) |touch| {
-                    if (touch.id == mt.id) {
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            // Only remove if not found AND we have other touches being reported
-            if (!found and io_state.num_touches > 0) self.movement_touch = null;
+        // Remove touches not found in current touch list
+        if (self.move_touch) |mt| {
+            if (!self.findTouch(input, mt.id)) self.move_touch = null;
         }
-
         if (self.look_touch) |lt| {
-            var found = false;
-            for (0..io_state.num_touches) |i| {
-                if (io_state.getTouch(i)) |touch| {
-                    if (touch.id == lt.id) {
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            if (!found and io_state.num_touches > 0) self.look_touch = null;
+            if (!self.findTouch(input, lt.id)) self.look_touch = null;
         }
-
         if (self.jump_touch) |jt| {
-            var found = false;
-            for (0..io_state.num_touches) |i| {
-                if (io_state.getTouch(i)) |touch| {
-                    if (touch.id == jt.id) {
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            if (!found and io_state.num_touches > 0) {
-                self.jump_touch = null;
-                // prev_jump_touch_id will be cleared in the main update logic
-            }
+            if (!self.findTouch(input, jt.id)) self.jump_touch = null;
         }
-
         if (self.crouch_touch) |ct| {
-            var found = false;
-            for (0..io_state.num_touches) |i| {
-                if (io_state.getTouch(i)) |touch| {
-                    if (touch.id == ct.id) {
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            if (!found and io_state.num_touches > 0) self.crouch_touch = null;
+            if (!self.findTouch(input, ct.id)) self.crouch_touch = null;
         }
     }
 
-    // Touch area detection
-    fn isInMovementArea(_: *TouchInput, x: f32, y: f32, _: f32, screen_h: f32) bool {
-        const center_x = cfg.movement_radius + 20;
-        const center_y = screen_h - cfg.movement_radius - 20;
-        const dx = x - center_x;
-        const dy = y - center_y;
-        return (dx * dx + dy * dy) <= (cfg.movement_radius * cfg.movement_radius);
+    fn findTouch(self: *TouchState, input: *const Input, id: usize) bool {
+        _ = self;
+        for (0..input.num_touches) |i| {
+            if (input.getTouch(i)) |touch| {
+                if (touch.id == id) return true;
+            }
+        }
+        return false;
     }
 
-    fn isInJumpArea(_: *TouchInput, x: f32, y: f32, screen_w: f32, screen_h: f32) bool {
-        const center_x = screen_w - cfg.jump_radius - 20;
-        const center_y = screen_h - cfg.jump_radius - 20;
-        const dx = x - center_x;
-        const dy = y - center_y;
-        return (dx * dx + dy * dy) <= (cfg.jump_radius * cfg.jump_radius);
+    fn inMoveArea(_: *TouchState, x: f32, y: f32, _: f32, h: f32) bool {
+        const cx = move_radius + 20;
+        const cy = h - move_radius - 20;
+        const dx = x - cx;
+        const dy = y - cy;
+        return (dx * dx + dy * dy) <= (move_radius * move_radius);
     }
 
-    fn isInCrouchArea(_: *TouchInput, x: f32, y: f32, _: f32, screen_h: f32) bool {
-        const center_x = cfg.crouch_radius + 20;
-        const center_y = screen_h - cfg.movement_radius * 2 - cfg.crouch_radius - 30;
-        const dx = x - center_x;
-        const dy = y - center_y;
-        return (dx * dx + dy * dy) <= (cfg.crouch_radius * cfg.crouch_radius);
+    fn inJumpArea(_: *TouchState, x: f32, y: f32, w: f32, h: f32) bool {
+        const cx = w - jump_radius - 20;
+        const cy = h - jump_radius - 20;
+        const dx = x - cx;
+        const dy = y - cy;
+        return (dx * dx + dy * dy) <= (jump_radius * jump_radius);
     }
 
-    fn isInLookArea(_: *TouchInput, x: f32, y: f32, screen_w: f32, screen_h: f32) bool {
-        // Right side of screen, excluding jump button area
-        const jump_area_left = screen_w - cfg.jump_radius * 2 - 40;
-        const look_area_left = screen_w * 0.4;
+    fn inCrouchArea(_: *TouchState, x: f32, y: f32, _: f32, h: f32) bool {
+        const cx = crouch_radius + 20;
+        const cy = h - move_radius * 2 - crouch_radius - 30;
+        const dx = x - cx;
+        const dy = y - cy;
+        return (dx * dx + dy * dy) <= (crouch_radius * crouch_radius);
+    }
 
-        return x >= look_area_left and x < jump_area_left and y < screen_h - cfg.jump_radius * 2 - 40;
+    fn inLookArea(_: *TouchState, x: f32, y: f32, w: f32, h: f32) bool {
+        const jump_left = w - jump_radius * 2 - 40;
+        const look_left = w * 0.4;
+        return x >= look_left and x < jump_left and y < h - jump_radius * 2 - 40;
     }
 };
 
-// Combined Touch UI - Integrated with input system
+// Touch UI rendering
 pub const TouchUI = struct {
-    show_controls: bool = false,
-    fade_timer: f32 = 0,
+    show: bool = false,
+    fade: f32 = 0,
 
-    const cfg = struct {
-        const fade_duration = 2.0;
-        const alpha_base = 0.15;
-        const alpha_active = 0.4;
-        const alpha_pressed = 0.6;
+    const fade_time = 2.0;
+    const alpha_base: f32 = 0.15;
+    const alpha_active: f32 = 0.4;
+    const alpha_pressed: f32 = 0.6;
 
-        // Colors
-        const movement_color = [3]f32{ 0.2, 0.6, 1.0 };
-        const jump_color = [3]f32{ 1.0, 0.4, 0.2 };
-        const crouch_color = [3]f32{ 0.8, 0.8, 0.2 };
-        const look_color = [3]f32{ 0.6, 0.6, 0.6 };
-    };
+    pub fn update(self: *TouchUI, input: *const Input, dt: f32) void {
+        const has_touch = input.touch.move_touch != null or input.touch.look_touch != null or
+            input.touch.jump or input.touch.crouch;
 
-    pub fn update(self: *TouchUI, input_system: *const Input, dt: f32) void {
-        // Show controls if touch input is detected
-        const has_touch_input = input_system.touch.movement_touch != null or
-            input_system.touch.look_touch != null or
-            input_system.touch.jump or
-            input_system.touch.crouch;
-
-        if (has_touch_input) {
-            self.show_controls = true;
-            self.fade_timer = cfg.fade_duration;
-        } else if (self.fade_timer > 0) {
-            self.fade_timer -= dt;
-            if (self.fade_timer <= 0) {
-                self.show_controls = false;
-            }
+        if (has_touch) {
+            self.show = true;
+            self.fade = fade_time;
+        } else if (self.fade > 0) {
+            self.fade -= dt;
+            if (self.fade <= 0) self.show = false;
         }
     }
 
-    pub fn render(self: *const TouchUI, input_system: *const Input) void {
-        if (!self.show_controls) return;
+    pub fn render(self: *const TouchUI, input: *const Input) void {
+        if (!self.show) return;
 
-        const screen_w = sapp.widthf();
-        const screen_h = sapp.heightf();
-        const fade_alpha: f32 = if (self.fade_timer > 0) 1.0 else 0.0;
+        const w = sapp.widthf();
+        const h = sapp.heightf();
+        const alpha: f32 = if (self.fade > 0) 1.0 else 0.0;
 
         ig.igSetNextWindowPos(.{ .x = 0, .y = 0 }, ig.ImGuiCond_Always);
-        ig.igSetNextWindowSize(.{ .x = screen_w, .y = screen_h }, ig.ImGuiCond_Always);
+        ig.igSetNextWindowSize(.{ .x = w, .y = h }, ig.ImGuiCond_Always);
         const flags = ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoResize |
             ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoScrollbar |
             ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoInputs;
 
         if (ig.igBegin("TouchControls", null, flags)) {
             const dl = ig.igGetWindowDrawList();
-
-            self.drawMovementControl(dl, input_system, fade_alpha);
-            self.drawJumpControl(dl, input_system, screen_w, screen_h, fade_alpha);
-            self.drawCrouchControl(dl, input_system, screen_h, fade_alpha);
-            self.drawLookArea(dl, input_system, screen_w, screen_h, fade_alpha);
+            self.drawMove(dl, input, alpha);
+            self.drawJump(dl, input, w, h, alpha);
+            self.drawCrouch(dl, input, h, alpha);
+            self.drawLook(dl, input, w, h, alpha);
         }
         ig.igEnd();
     }
 
-    fn drawMovementControl(self: *const TouchUI, dl: *ig.ImDrawList, input_system: *const Input, fade_alpha: f32) void {
+    fn drawMove(self: *const TouchUI, dl: *ig.ImDrawList, input: *const Input, fade: f32) void {
         _ = self;
-        const radius = TouchInput.cfg.movement_radius;
-        const center_x = radius + 20;
-        const center_y = sapp.heightf() - radius - 20;
+        const r = TouchState.move_radius;
+        const cx = r + 20;
+        const cy = sapp.heightf() - r - 20;
+        const active = input.touch.move_touch != null;
+        const a = (if (active) alpha_active else alpha_base) * fade;
 
-        const is_active = input_system.touch.movement_touch != null;
-        const alpha: f32 = if (is_active) cfg.alpha_active else cfg.alpha_base;
-        const final_alpha = alpha * fade_alpha;
+        const color = ig.igColorConvertFloat4ToU32(.{ .x = 0.2, .y = 0.6, .z = 1.0, .w = a });
+        const border = ig.igColorConvertFloat4ToU32(.{ .x = 0.2, .y = 0.6, .z = 1.0, .w = a * 0.8 });
 
-        // Outer circle
-        const outer_color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.movement_color[0], .y = cfg.movement_color[1], .z = cfg.movement_color[2], .w = final_alpha });
-        const border_color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.movement_color[0], .y = cfg.movement_color[1], .z = cfg.movement_color[2], .w = final_alpha * 0.8 });
+        ig.ImDrawList_AddCircleFilled(dl, .{ .x = cx, .y = cy }, r, color, 32);
+        ig.ImDrawList_AddCircle(dl, .{ .x = cx, .y = cy }, r, border);
 
-        ig.ImDrawList_AddCircleFilled(dl, .{ .x = center_x, .y = center_y }, radius, outer_color, 32);
-        ig.ImDrawList_AddCircle(dl, .{ .x = center_x, .y = center_y }, radius, border_color);
-
-        // Inner knob if active
-        if (is_active and input_system.touch.movement_touch != null) {
-            const touch = input_system.touch.movement_touch.?;
-            const knob_radius = radius * 0.2;
-            const knob_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = final_alpha * 1.5 });
-
-            ig.ImDrawList_AddCircleFilled(dl, .{ .x = touch.current_x, .y = touch.current_y }, knob_radius, knob_color, 16);
+        if (active and input.touch.move_touch != null) {
+            const t = input.touch.move_touch.?;
+            const knob = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = a * 1.5 });
+            ig.ImDrawList_AddCircleFilled(dl, .{ .x = t.x, .y = t.y }, r * 0.2, knob, 16);
         }
-
-        // Center dot
-        const center_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = final_alpha * 0.6 });
-        ig.ImDrawList_AddCircleFilled(dl, .{ .x = center_x, .y = center_y }, 3.0, center_color, 8);
     }
 
-    fn drawJumpControl(self: *const TouchUI, dl: *ig.ImDrawList, input_system: *const Input, screen_w: f32, screen_h: f32, fade_alpha: f32) void {
+    fn drawJump(self: *const TouchUI, dl: *ig.ImDrawList, input: *const Input, w: f32, h: f32, fade: f32) void {
         _ = self;
-        const radius = TouchInput.cfg.jump_radius;
-        const center_x = screen_w - radius - 20;
-        const center_y = screen_h - radius - 20;
+        const r = TouchState.jump_radius;
+        const cx = w - r - 20;
+        const cy = h - r - 20;
+        const pressed = input.touch.jump;
+        const a = (if (pressed) alpha_pressed else alpha_base) * fade;
 
-        const is_pressed = input_system.touch.jump;
-        const alpha: f32 = if (is_pressed) cfg.alpha_pressed else cfg.alpha_base;
-        const final_alpha = alpha * fade_alpha;
+        const color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 0.4, .z = 0.2, .w = a });
+        const border = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 0.4, .z = 0.2, .w = a * 0.8 });
 
-        const color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.jump_color[0], .y = cfg.jump_color[1], .z = cfg.jump_color[2], .w = final_alpha });
-        const border_color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.jump_color[0], .y = cfg.jump_color[1], .z = cfg.jump_color[2], .w = final_alpha * 0.8 });
+        ig.ImDrawList_AddCircleFilled(dl, .{ .x = cx, .y = cy }, r, color, 24);
+        ig.ImDrawList_AddCircle(dl, .{ .x = cx, .y = cy }, r, border);
 
-        ig.ImDrawList_AddCircleFilled(dl, .{ .x = center_x, .y = center_y }, radius, color, 24);
-        ig.ImDrawList_AddCircle(dl, .{ .x = center_x, .y = center_y }, radius, border_color);
-
-        // Jump icon (simple up arrow)
-        const icon_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = final_alpha * 1.2 });
-        const arrow_size = radius * 0.4;
-        ig.ImDrawList_AddTriangleFilled(dl, .{ .x = center_x, .y = center_y - arrow_size }, .{ .x = center_x - arrow_size * 0.6, .y = center_y + arrow_size * 0.3 }, .{ .x = center_x + arrow_size * 0.6, .y = center_y + arrow_size * 0.3 }, icon_color);
+        // Up arrow
+        const icon = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = a * 1.2 });
+        const s = r * 0.4;
+        ig.ImDrawList_AddTriangleFilled(dl, .{ .x = cx, .y = cy - s }, .{ .x = cx - s * 0.6, .y = cy + s * 0.3 }, .{ .x = cx + s * 0.6, .y = cy + s * 0.3 }, icon);
     }
 
-    fn drawCrouchControl(self: *const TouchUI, dl: *ig.ImDrawList, input_system: *const Input, screen_h: f32, fade_alpha: f32) void {
+    fn drawCrouch(self: *const TouchUI, dl: *ig.ImDrawList, input: *const Input, h: f32, fade: f32) void {
         _ = self;
-        const radius = TouchInput.cfg.crouch_radius;
-        const center_x = radius + 20;
-        const center_y = screen_h - TouchInput.cfg.movement_radius * 2 - radius - 30;
+        const r = TouchState.crouch_radius;
+        const cx = r + 20;
+        const cy = h - TouchState.move_radius * 2 - r - 30;
+        const pressed = input.touch.crouch;
+        const a = (if (pressed) alpha_pressed else alpha_base) * fade;
 
-        const is_pressed = input_system.touch.crouch;
-        const alpha: f32 = if (is_pressed) cfg.alpha_pressed else cfg.alpha_base;
-        const final_alpha = alpha * fade_alpha;
+        const color = ig.igColorConvertFloat4ToU32(.{ .x = 0.8, .y = 0.8, .z = 0.2, .w = a });
+        const border = ig.igColorConvertFloat4ToU32(.{ .x = 0.8, .y = 0.8, .z = 0.2, .w = a * 0.8 });
 
-        const color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.crouch_color[0], .y = cfg.crouch_color[1], .z = cfg.crouch_color[2], .w = final_alpha });
-        const border_color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.crouch_color[0], .y = cfg.crouch_color[1], .z = cfg.crouch_color[2], .w = final_alpha * 0.8 });
+        ig.ImDrawList_AddCircleFilled(dl, .{ .x = cx, .y = cy }, r, color, 20);
+        ig.ImDrawList_AddCircle(dl, .{ .x = cx, .y = cy }, r, border);
 
-        ig.ImDrawList_AddCircleFilled(dl, .{ .x = center_x, .y = center_y }, radius, color, 20);
-        ig.ImDrawList_AddCircle(dl, .{ .x = center_x, .y = center_y }, radius, border_color);
-
-        // Crouch icon (simple down arrow)
-        const icon_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = final_alpha * 1.2 });
-        const arrow_size = radius * 0.4;
-        ig.ImDrawList_AddTriangleFilled(dl, .{ .x = center_x, .y = center_y + arrow_size }, .{ .x = center_x - arrow_size * 0.6, .y = center_y - arrow_size * 0.3 }, .{ .x = center_x + arrow_size * 0.6, .y = center_y - arrow_size * 0.3 }, icon_color);
+        // Down arrow
+        const icon = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = a * 1.2 });
+        const s = r * 0.4;
+        ig.ImDrawList_AddTriangleFilled(dl, .{ .x = cx, .y = cy + s }, .{ .x = cx - s * 0.6, .y = cy - s * 0.3 }, .{ .x = cx + s * 0.6, .y = cy - s * 0.3 }, icon);
     }
 
-    fn drawLookArea(self: *const TouchUI, dl: *ig.ImDrawList, input_system: *const Input, screen_w: f32, screen_h: f32, fade_alpha: f32) void {
+    fn drawLook(self: *const TouchUI, dl: *ig.ImDrawList, input: *const Input, w: f32, h: f32, fade: f32) void {
         _ = self;
-        const is_active = input_system.touch.look_touch != null;
-        if (!is_active) return;
+        const active = input.touch.look_touch != null;
+        if (!active) return;
 
-        const alpha = cfg.alpha_base * 0.5;
-        const final_alpha = alpha * fade_alpha;
+        const a = alpha_base * 0.5 * fade;
+        const jump_left = w - TouchState.jump_radius * 2 - 40;
+        const look_left = w * 0.4;
+        const look_bottom = h - TouchState.jump_radius * 2 - 40;
 
-        // Draw subtle look area indicator
-        const jump_area_left = screen_w - TouchInput.cfg.jump_radius * 2 - 40;
-        const look_area_left = screen_w * 0.4;
-        const look_area_bottom = screen_h - TouchInput.cfg.jump_radius * 2 - 40;
+        const color = ig.igColorConvertFloat4ToU32(.{ .x = 0.6, .y = 0.6, .z = 0.6, .w = a });
+        ig.ImDrawList_AddRectFilled(dl, .{ .x = look_left, .y = 0 }, .{ .x = jump_left, .y = look_bottom }, color);
 
-        const color = ig.igColorConvertFloat4ToU32(.{ .x = cfg.look_color[0], .y = cfg.look_color[1], .z = cfg.look_color[2], .w = final_alpha });
-
-        ig.ImDrawList_AddRectFilled(dl, .{ .x = look_area_left, .y = 0 }, .{ .x = jump_area_left, .y = look_area_bottom }, color);
-
-        // Draw crosshair at touch point if active
-        if (input_system.touch.look_touch) |touch| {
-            const crosshair_color = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = final_alpha * 2.0 });
-            const size = 8.0;
-            ig.ImDrawList_AddLine(dl, .{ .x = touch.current_x - size, .y = touch.current_y }, .{ .x = touch.current_x + size, .y = touch.current_y }, crosshair_color);
-            ig.ImDrawList_AddLine(dl, .{ .x = touch.current_x, .y = touch.current_y - size }, .{ .x = touch.current_x, .y = touch.current_y + size }, crosshair_color);
+        if (input.touch.look_touch) |t| {
+            const cross = ig.igColorConvertFloat4ToU32(.{ .x = 1.0, .y = 1.0, .z = 1.0, .w = a * 2.0 });
+            const s = 8.0;
+            ig.ImDrawList_AddLine(dl, .{ .x = t.x - s, .y = t.y }, .{ .x = t.x + s, .y = t.y }, cross);
+            ig.ImDrawList_AddLine(dl, .{ .x = t.x, .y = t.y - s }, .{ .x = t.x, .y = t.y + s }, cross);
         }
     }
 };

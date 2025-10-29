@@ -5,7 +5,7 @@ const ig = @import("cimgui");
 const simgui = sokol.imgui;
 
 const math = @import("lib/math.zig");
-const io = @import("lib/io.zig");
+const input = @import("lib/input.zig");
 const audio = @import("lib/audio.zig");
 
 const world = @import("core/world.zig");
@@ -128,14 +128,14 @@ export fn init() void {
 }
 export fn frame() void {
     game.run();
-    game.player.io.clean();
+    game.player.input.clean();
 }
 export fn cleanup() void {
     game.deinit();
 }
 export fn event(e: [*c]const sapp.Event) void {
     _ = simgui.handleEvent(e.*);
-    game.player.io.tick(e);
+    game.player.input.tick(e);
 }
 
 pub fn main() void {

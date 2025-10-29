@@ -1,16 +1,16 @@
 const std = @import("std");
 const math = @import("../lib/math.zig");
-const io = @import("../lib/io.zig");
 const input = @import("../lib/input.zig");
 const audio = @import("../lib/audio.zig");
 const world = @import("world.zig");
 const sokol = @import("sokol");
 const stime = sokol.time;
+const sapp = sokol.app;
 
 const Vec3 = math.Vec3;
 const Mat4 = math.Mat4;
 const Map = world.Map;
-const Vec2 = io.Vec2;
+const Vec2 = input.Vec2;
 
 pub const Player = struct {
     pos: Vec3,
@@ -20,7 +20,6 @@ pub const Player = struct {
     ground: bool,
     prev_ground: bool,
     crouch: bool,
-    io: io.IO,
     input: input.Input,
     block: world.Block,
     spawn_time: u64,
@@ -67,7 +66,6 @@ pub const Player = struct {
             .ground = false,
             .prev_ground = false,
             .crouch = false,
-            .io = .{},
             .input = .{},
             .block = 2,
             .spawn_time = stime.now(),
@@ -205,8 +203,8 @@ pub const Input = struct {
 
     pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32, allow_block_editing: bool) bool {
         // Update unified input system with ground state for autohop
-        player_ptr.input.update(&player_ptr.io, dt, player_ptr.ground);
-        const input_state = &player_ptr.input.state;
+        player_ptr.input.update(dt, player_ptr.ground);
+        const input_state = &player_ptr.input;
 
         // Handle all input through unified system
         handle.movement(player_ptr, dt, input_state);
@@ -222,8 +220,8 @@ pub const Input = struct {
 
     pub fn tickSpeedrun(player_ptr: *Player, world_map: *Map, dt: f32) void {
         // Update unified input system with ground state for autohop
-        player_ptr.input.update(&player_ptr.io, dt, player_ptr.ground);
-        const input_state = &player_ptr.input.state;
+        player_ptr.input.update(dt, player_ptr.ground);
+        const input_state = &player_ptr.input;
 
         // Handle movement and camera only in speedrun mode
         handle.movement(player_ptr, dt, input_state);
@@ -237,7 +235,7 @@ pub const Input = struct {
     }
 
     const handle = struct {
-        pub fn movement(p: *Player, dt: f32, input_state: *const input.InputState) void {
+        pub fn movement(p: *Player, dt: f32, input_state: *const input.Input) void {
             var mv = input_state.move;
 
             // Improved autostrafe for bunnyhopping
@@ -258,7 +256,7 @@ pub const Input = struct {
             Player.update.pos(p, dir, dt);
         }
 
-        pub fn crouch(p: *Player, world_map: *Map, input_state: *const input.InputState) void {
+        pub fn crouch(p: *Player, world_map: *Map, input_state: *const input.Input) void {
             const wish = input_state.crouch;
 
             if (p.crouch and !wish) {
@@ -275,7 +273,7 @@ pub const Input = struct {
             }
         }
 
-        pub fn jump(p: *Player, input_state: *const input.InputState) void {
+        pub fn jump(p: *Player, input_state: *const input.Input) void {
             if (input_state.jump_pressed and p.ground) {
                 p.vel.data[1] = cfg.jump_power;
                 p.ground = false;
@@ -284,14 +282,14 @@ pub const Input = struct {
             }
         }
 
-        pub fn camera(p: *Player, input_state: *const input.InputState) void {
+        pub fn camera(p: *Player, input_state: *const input.Input) void {
             if (input_state.look.x != 0 or input_state.look.y != 0) {
                 p.yaw += input_state.look.x;
                 p.pitch = @max(-cfg.pitch_limit, @min(cfg.pitch_limit, p.pitch + input_state.look.y));
             }
         }
 
-        pub fn blocks(p: *Player, world_map: *Map, input_state: *const input.InputState) bool {
+        pub fn blocks(p: *Player, world_map: *Map, input_state: *const input.Input) bool {
             const look = Player.lookdir(p.yaw, p.pitch);
             const hit = Collision.raycast(world_map, p.pos, look, cfg.reach) orelse return false;
             const pos = [3]i32{
@@ -332,16 +330,18 @@ pub const Input = struct {
             return false;
         }
 
-        pub fn color(p: *Player, input_state: *const input.InputState) void {
+        pub fn color(p: *Player, input_state: *const input.Input) void {
             if (input_state.prev_block_pressed) p.block -%= 1;
             if (input_state.next_block_pressed) p.block +%= 1;
         }
 
-        pub fn mouse(p: *Player, input_state: *const input.InputState) void {
-            if (input_state.escape_pressed) p.io.mouse.unlock();
+        pub fn mouse(_: *Player, input_state: *const input.Input) void {
+            if (input_state.escape_pressed) {
+                sapp.lockMouse(false);
+            }
         }
 
-        pub fn restart(p: *Player, input_state: *const input.InputState) void {
+        pub fn restart(p: *Player, input_state: *const input.Input) void {
             if (input_state.restart_pressed) {
                 const new_player = Player.spawn(Player.cfg.spawn.x, Player.cfg.spawn.y, Player.cfg.spawn.z);
                 p.pos = new_player.pos;
