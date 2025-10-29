@@ -41,10 +41,23 @@ pub const State = struct {
         self.parsed = try std.json.parseFromSlice(Config, self.allocator, content, .{});
         self.config = self.parsed.?.value;
 
-        // Make a copy of the data string to ensure it's owned by us
+        // Make copies of all strings to ensure they're owned by us
+        if (self.config.local.player.username.len > 0) {
+            const username_copy = try self.allocator.dupe(u8, self.config.local.player.username);
+            self.config.local.player.username = username_copy;
+        }
+
         if (self.config.data.len > 0) {
             const data_copy = try self.allocator.dupe(u8, self.config.data);
             self.config.data = data_copy;
+        }
+
+        // Copy leaderboard usernames
+        for (self.config.leaderboard, 0..) |entry, i| {
+            if (entry.username.len > 0) {
+                const name_copy = try self.allocator.dupe(u8, entry.username);
+                self.config.leaderboard[i].username = name_copy;
+            }
         }
     }
 
@@ -84,9 +97,20 @@ pub const State = struct {
     pub fn deinit(self: *State, writer_buffer: []u8) void {
         self.save(writer_buffer) catch {};
 
-        // Free our copied data
+        // Free all our copied strings
+        if (self.config.local.player.username.len > 0) {
+            self.allocator.free(@constCast(self.config.local.player.username));
+        }
+
         if (self.config.data.len > 0) {
             self.allocator.free(@constCast(self.config.data));
+        }
+
+        // Free leaderboard usernames
+        for (self.config.leaderboard) |entry| {
+            if (entry.username.len > 0) {
+                self.allocator.free(@constCast(entry.username));
+            }
         }
 
         if (self.parsed) |parsed| parsed.deinit();
@@ -117,7 +141,7 @@ pub const State = struct {
         var read_pos: usize = 0;
         var block_pos: usize = 0;
 
-        while (read_pos < compressed.len and block_pos < 64 * 64 * 64) {
+        while (read_pos + 1 < compressed.len and block_pos < 64 * 64 * 64) {
             const run_length = compressed[read_pos];
             const block_value = compressed[read_pos + 1];
             read_pos += 2;

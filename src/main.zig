@@ -78,14 +78,15 @@ pub const Game = struct {
         const world_changed = switch (g.state.config.local.state) {
             .build => blk: {
                 // Build mode: allow block editing
-                const changed = player.Input.tick(&g.player, &g.world, dt);
+                const changed = player.Input.tickWithMode(&g.player, &g.world, dt, true);
                 Player.update.phys(&g.player, &g.world, dt);
                 break :blk changed;
             },
             .speedrun => blk: {
-                // Speedrun mode: no block editing, just movement
+                // Speedrun mode: movement only, no block editing
+                _ = player.Input.tickWithMode(&g.player, &g.world, dt, false);
                 Player.update.phys(&g.player, &g.world, dt);
-                break :blk false;
+                break :blk false; // Never rebuild mesh in speedrun mode
             },
         };
 

@@ -206,6 +206,10 @@ pub const Input = struct {
     };
 
     pub fn tick(player_ptr: *Player, world_map: *Map, dt: f32) bool {
+        return tickWithMode(player_ptr, world_map, dt, true);
+    }
+
+    pub fn tickWithMode(player_ptr: *Player, world_map: *Map, dt: f32, allow_block_editing: bool) bool {
         // Update unified input system with ground state for autohop
         player_ptr.input.update(&player_ptr.io, dt, player_ptr.ground);
         const input_state = &player_ptr.input.state;
@@ -215,7 +219,7 @@ pub const Input = struct {
         handle.crouch(player_ptr, world_map, input_state);
         handle.jump(player_ptr, input_state);
         handle.camera(player_ptr, input_state);
-        const world_changed = handle.blocks(player_ptr, world_map, input_state);
+        const world_changed = if (allow_block_editing) handle.blocks(player_ptr, world_map, input_state) else false;
         handle.color(player_ptr, input_state);
         handle.mouse(player_ptr, input_state);
 
