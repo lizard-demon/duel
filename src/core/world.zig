@@ -44,14 +44,73 @@ pub const Map = struct {
     pub fn save(w: *const Map) void {
         const file = std.fs.cwd().createFile("world.dat", .{}) catch return;
         defer file.close();
-        _ = file.writeAll(std.mem.asBytes(&w.blocks)) catch {};
+
+        // RLE compress the blocks
+        var compressed: [64 * 64 * 64 * 2]u8 = undefined; // worst case: alternating blocks
+        var write_pos: usize = 0;
+
+        var current_block = w.blocks[0][0][0];
+        var run_length: u8 = 1;
+
+        for (0..64) |x| {
+            for (0..64) |y| {
+                for (0..64) |z| {
+                    if (x == 0 and y == 0 and z == 0) continue; // skip first block
+
+                    const block = w.blocks[x][y][z];
+                    if (block == current_block and run_length < 255) {
+                        run_length += 1;
+                    } else {
+                        // Write current run
+                        compressed[write_pos] = run_length;
+                        compressed[write_pos + 1] = current_block;
+                        write_pos += 2;
+
+                        current_block = block;
+                        run_length = 1;
+                    }
+                }
+            }
+        }
+
+        // Write final run
+        compressed[write_pos] = run_length;
+        compressed[write_pos + 1] = current_block;
+        write_pos += 2;
+
+        _ = file.writeAll(compressed[0..write_pos]) catch {};
     }
 
     pub fn load() Map {
         const file = std.fs.cwd().openFile("world.dat", .{}) catch return Map.init();
         defer file.close();
-        var w = Map{ .blocks = undefined };
-        _ = file.readAll(std.mem.asBytes(&w.blocks)) catch return Map.init();
+
+        // Read compressed data
+        var compressed: [64 * 64 * 64 * 2]u8 = undefined;
+        const bytes_read = file.readAll(&compressed) catch return Map.init();
+
+        var w = Map{ .blocks = std.mem.zeroes([64][64][64]Block) };
+        var read_pos: usize = 0;
+        var block_pos: usize = 0;
+
+        // RLE decompress
+        while (read_pos < bytes_read and block_pos < 64 * 64 * 64) {
+            const run_length = compressed[read_pos];
+            const block_value = compressed[read_pos + 1];
+            read_pos += 2;
+
+            for (0..run_length) |_| {
+                if (block_pos >= 64 * 64 * 64) break;
+
+                const x = block_pos / (64 * 64);
+                const y = (block_pos % (64 * 64)) / 64;
+                const z = block_pos % 64;
+
+                w.blocks[x][y][z] = block_value;
+                block_pos += 1;
+            }
+        }
+
         return w;
     }
 
